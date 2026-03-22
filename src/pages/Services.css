@@ -1,0 +1,30 @@
+.services-page { padding-top: 80px; }
+.services-hero { background: var(--dark-900); padding: var(--space-16) 0 var(--space-12); text-align: center; }
+.services-hero h1 { color: var(--light-100); font-size: 2.5rem; margin-bottom: var(--space-3); }
+.services-hero p { color: var(--light-500); font-size: 1.1rem; }
+
+.services-toolbar { margin-bottom: var(--space-8); }
+.services-search { position: relative; margin-bottom: var(--space-4); max-width: 400px; }
+.services-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--dark-400); }
+.services-search .form-input { padding-left: 40px; width: 100%; }
+
+.services-filters { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.filter-chip { padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); background: var(--light-300); color: var(--dark-400); font-size: 0.85rem; font-weight: 500; transition: all var(--transition-fast); border: none; cursor: pointer; }
+.filter-chip:hover { background: var(--light-400); }
+.filter-chip--active { background: var(--primary); color: white; }
+
+.services-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--space-5); }
+.svc-card { background: var(--light-100); border-radius: var(--radius-xl); padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); transition: all var(--transition-base); }
+.svc-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+.svc-card__icon { width: 52px; height: 52px; border-radius: var(--radius-lg); background: rgba(46,125,50,0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+.svc-card__body h3 { font-size: 1.05rem; margin-bottom: var(--space-1); }
+.svc-card__body p { font-size: 0.9rem; color: var(--dark-400); line-height: 1.5; }
+.svc-card__footer { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: var(--space-4); border-top: 1px solid var(--light-300); }
+.svc-card__price { font-weight: 700; color: var(--primary); font-size: 1rem; }
+
+.services-empty { text-align: center; padding: var(--space-16); color: var(--dark-400); }
+
+@media (max-width: 768px) {
+  .services-list-grid { grid-template-columns: 1fr; }
+  .services-hero h1 { font-size: 1.75rem; }
+}
