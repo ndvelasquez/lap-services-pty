@@ -1,29 +1,8 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, Clock, Users, DollarSign, TrendingUp, ChevronRight, CheckCircle } from 'lucide-react'
+import { getAllAppointments, supabase } from '../../services/api'
 import './AdminDashboard.css'
-
-const kpis = [
-  { icon: Calendar, label: 'Citas Hoy', value: '8', change: '+12%', color: '#2E7D32' },
-  { icon: Clock, label: 'Pendientes', value: '15', change: null, color: '#FF9800' },
-  { icon: DollarSign, label: 'Ingresos del Mes', value: '$4,850', change: '+8%', color: '#4CAF50' },
-  { icon: Users, label: 'Clientes Activos', value: '127', change: '+5%', color: '#2196F3' },
-]
-
-const todayAppointments = [
-  { time: '08:00 AM', client: 'María García', service: 'Limpieza de Apartamento', status: 'confirmed' },
-  { time: '10:00 AM', client: 'Carlos López', service: 'Lavado de AC (x3)', status: 'confirmed' },
-  { time: '12:00 PM', client: 'Ana Rodríguez', service: 'Limpieza de Muebles', status: 'pending' },
-  { time: '02:00 PM', client: 'Pedro Martínez', service: 'Reparación plomería', status: 'confirmed' },
-  { time: '04:00 PM', client: null, service: 'Disponible', status: 'available' },
-]
-
-const activity = [
-  { text: 'Nueva solicitud de cita — Laura Sánchez', time: 'hace 10 min' },
-  { text: 'Cotización COT-045 aceptada — $285.00', time: 'hace 1 hora' },
-  { text: 'Cita completada — María García', time: 'hace 2 horas' },
-  { text: 'Nuevo cliente registrado — José Hernández', time: 'hace 3 horas' },
-  { text: 'Cotización enviada COT-046', time: 'hace 5 horas' },
-]
 
 const weekData = [
   { day: 'Lun', value: 6 },
@@ -36,7 +15,72 @@ const weekData = [
 ]
 
 export default function AdminDashboard() {
-  const maxVal = Math.max(...weekData.map(d => d.value))
+  const [appointments, setAppointments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [totalClients, setTotalClients] = useState(0)
+  const [historicalIncome, setHistoricalIncome] = useState(0)
+  const [chartData, setChartData] = useState([])
+
+  const fetchDashboardData = async () => {
+    try {
+      const apts = await getAllAppointments()
+      // get total clients (unique users in profiles with role client, or just count logic)
+      const { count: clientCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).neq('role', 'admin')
+      
+      // Calculate historical income from accepted quotations
+      const { data: quotes } = await supabase.from('quotations').select('total').eq('status', 'accepted')
+      const income = quotes?.reduce((sum, q) => sum + (q.total || 0), 0) || 0
+      
+      const formatted = apts.map(apt => {
+        const serviceNames = apt.appointment_services?.map(as => as.services?.name).join(', ') || 'Sin Servicio'
+        return {
+          id: apt.id,
+          client: apt.profiles?.name || 'Cliente sin nombre',
+          service: serviceNames,
+          date: apt.appointment_date,
+          time: apt.start_time?.slice(0,5),
+          status: apt.status
+        }
+      })
+
+      // Aggregate last 7 days for the chart
+      const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+      const last7Days = []
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date()
+        d.setDate(d.getDate() - i)
+        const dateStr = d.toISOString().split('T')[0]
+        const count = formatted.filter(a => a.date === dateStr).length
+        last7Days.push({ day: dayNames[d.getDay()], value: count })
+      }
+
+      setAppointments(formatted)
+      setTotalClients(clientCount || 0)
+      setHistoricalIncome(income)
+      setChartData(last7Days)
+    } catch (err) {
+      console.error('Error fetching admin dash', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchDashboardData()
+  }, [])
+
+  const maxVal = Math.max(...(chartData.length > 0 ? chartData.map(d => d.value) : [1]))
+
+  const todayStr = new Date().toISOString().split('T')[0]
+  const todayAppointments = appointments.filter(a => a.date === todayStr)
+  const pendingCount = appointments.filter(a => a.status === 'pending' || a.status === 'quotation_sent' || a.status === 'modification_requested').length
+
+  const kpis = [
+    { id: 'kpi-today', icon: Calendar, label: 'Citas Hoy', value: todayAppointments.length.toString(), change: null, color: '#2E7D32' },
+    { id: 'kpi-pending', icon: Clock, label: 'Pendientes', value: pendingCount.toString(), change: null, color: '#FF9800' },
+    { id: 'kpi-income', icon: DollarSign, label: 'Ingresos Históricos', value: `$${historicalIncome.toFixed(2)}`, change: null, color: '#4CAF50' },
+    { id: 'kpi-clients', icon: Users, label: 'Clientes Registrados', value: totalClients.toString(), change: '+1 hoy', color: '#2196F3' },
+  ]
 
   return (
     <div className="admin-dash">
@@ -51,8 +95,8 @@ export default function AdminDashboard() {
       </div>
 
       <div className="kpi-grid">
-        {kpis.map((kpi, i) => (
-          <div key={i} className="kpi-card card">
+        {kpis.map((kpi) => (
+          <div key={kpi.id} className="kpi-card card" data-testid={kpi.id}>
             <div className="kpi-card__icon" style={{ background: `${kpi.color}15`, color: kpi.color }}>
               <kpi.icon size={22} />
             </div>
@@ -73,28 +117,30 @@ export default function AdminDashboard() {
         <div className="admin-dash__main">
           <div className="card">
             <h2>Citas del Día</h2>
-            <div className="today-list">
-              {todayAppointments.map((apt, i) => (
-                <div key={i} className={`today-item ${apt.status === 'available' ? 'today-item--available' : ''}`}>
+            <div className="today-list" data-testid="today-list">
+              {loading ? (
+                <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>Cargando...</p>
+              ) : todayAppointments.length === 0 ? (
+                <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>No hay citas agendadas para hoy.</p>
+              ) : todayAppointments.map((apt, i) => (
+                <div key={i} className={`today-item`}>
                   <span className="today-item__time">{apt.time}</span>
                   <div className="today-item__info">
                     <strong>{apt.client || 'Sin agendar'}</strong>
                     <span>{apt.service}</span>
                   </div>
-                  {apt.status !== 'available' && (
-                    <span className={`badge badge--${apt.status === 'confirmed' ? 'confirmed' : 'pending'}`}>
-                      {apt.status === 'confirmed' ? 'Confirmada' : 'Pendiente'}
-                    </span>
-                  )}
+                  <span className={`badge badge--${apt.status === 'confirmed' ? 'confirmed' : 'pending'}`}>
+                    {apt.status === 'confirmed' ? 'Confirmada' : apt.status}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
 
           <div className="card">
-            <h2>Citas por Día</h2>
-            <div className="chart-bars">
-              {weekData.map((d, i) => (
+            <h2>Citas por Día (Semana)</h2>
+            <div className="chart-bars" data-testid="chart-bars">
+              {chartData.map((d, i) => (
                 <div key={i} className="chart-bar-col">
                   <div className="chart-bar" style={{ height: `${maxVal > 0 ? (d.value / maxVal) * 120 : 0}px` }}>
                     <span className="chart-bar__value">{d.value}</span>
@@ -109,13 +155,15 @@ export default function AdminDashboard() {
         <div className="admin-dash__side">
           <div className="card">
             <h2>Actividad Reciente</h2>
-            <div className="activity-list">
-              {activity.map((a, i) => (
+            <div className="activity-list" data-testid="activity-list">
+              {loading ? (
+                 <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>Cargando...</p>
+              ) : appointments.slice(0, 5).map((a, i) => (
                 <div key={i} className="activity-item">
                   <div className="activity-dot" />
                   <div>
-                    <p>{a.text}</p>
-                    <span>{a.time}</span>
+                    <p>Nueva solicitud: {a.client}</p>
+                    <span style={{ fontSize: '13px' }}>Fecha: {a.date} | {a.time}</span>
                   </div>
                 </div>
               ))}
@@ -126,3 +174,4 @@ export default function AdminDashboard() {
     </div>
   )
 }
+

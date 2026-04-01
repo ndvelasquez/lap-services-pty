@@ -1,107 +1,108 @@
-import { Link } from 'react-router-dom'
-import { Calendar, FileText, Bell, ChevronRight, Star, Clock, MapPin } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Calendar, FileText, Bell, ChevronRight, Clock, MapPin, PlusCircle } from 'lucide-react'
+import { getCurrentUser, getClientAppointments } from '../../services/api'
 import './ClientDashboard.css'
 
-const appointments = [
-  { id: 1, service: 'Limpieza de Apartamento', date: 'Vie 27 Mar, 10:00 AM', location: 'Av. Principal #42, Apto 7B', status: 'confirmed' },
-  { id: 2, service: 'Lavado de Aire Acondicionado', date: 'Lun 30 Mar, 02:00 PM', location: 'Av. Principal #42, Apto 7B', status: 'pending' },
-  { id: 3, service: 'Limpieza de Muebles', date: 'Lun 16 Mar, 09:00 AM', location: 'Av. Principal #42, Apto 7B', status: 'completed' },
-]
-
-const quotations = [
-  { id: 'COT-001', service: 'Limpieza de Apartamento', date: '25 Mar 2026', amount: '$120.00', status: 'pending' },
-  { id: 'COT-002', service: 'Lavado de AC + Muebles', date: '18 Mar 2026', amount: '$185.00', status: 'accepted' },
-  { id: 'COT-003', service: 'Limpieza de Oficina', date: '10 Mar 2026', amount: '$250.00', status: 'rejected' },
-]
-
-const notifications = [
-  { icon: '🔔', text: 'Tu cita del 27 de Marzo ha sido confirmada', time: 'hace 2 horas' },
-  { icon: '📋', text: 'Nueva cotización recibida: COT-001', time: 'hace 1 día' },
-  { icon: '✅', text: 'Servicio completado. ¡Califícanos!', time: 'hace 5 días' },
-]
-
-const statusLabels = { confirmed: 'Confirmada', pending: 'Pendiente', completed: 'Completada', accepted: 'Aceptada', rejected: 'Rechazada', cancelled: 'Cancelada' }
-const statusClass = { confirmed: 'confirmed', pending: 'pending', completed: 'completed', accepted: 'confirmed', rejected: 'cancelled', cancelled: 'cancelled' }
+const statusLabels = { pending: 'Pendiente', quotation_sent: 'Cotización Enviada', payment_uploaded: 'Pago en Revisión', confirmed: 'Confirmada', completed: 'Completada', cancelled: 'Cancelada', modification_requested: 'Cambio Solicitado' }
+const statusClass = { pending: 'pending', quotation_sent: 'pending', payment_uploaded: 'confirmed', confirmed: 'confirmed', completed: 'completed', cancelled: 'cancelled', modification_requested: 'pending' }
 
 export default function ClientDashboard() {
+  const navigate = useNavigate()
+  const [user, setUser] = useState(null)
+  const [appointments, setAppointments] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const currentUser = await getCurrentUser()
+        if (!currentUser) {
+          navigate('/login')
+          return
+        }
+        setUser(currentUser)
+        
+        const apts = await getClientAppointments(currentUser.id)
+        
+        const formattedApts = apts.map(apt => {
+          const serviceNames = apt.appointment_services?.map(as => as.services.name).join(', ') || 'Servicio de Limpieza'
+          
+          let dateStr = apt.appointment_date
+          if (apt.appointment_date) {
+            const [y, m, d] = apt.appointment_date.split('-')
+            const dateObj = new Date(y, m - 1, d)
+            dateStr = dateObj.toLocaleDateString('es-PA', { weekday: 'short', day: 'numeric', month: 'short' }) + `, ${apt.start_time.slice(0,5)}`
+          }
+
+          return {
+            id: apt.id,
+            service: serviceNames,
+            date: dateStr,
+            location: apt.location_address || 'Tu Domicilio',
+            status: apt.status
+          }
+        })
+
+        setAppointments(formattedApts)
+      } catch (err) {
+        console.error('Error loading dashboard', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
+  }, [navigate])
+
+  if (loading) {
+    return <div className="client-dash" style={{ paddingTop: '100px', minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><h2>Cargando tu panel...</h2></div>
+  }
+
   return (
     <div className="client-dash" style={{ paddingTop: '100px' }}>
       <div className="container">
         <div className="client-dash__welcome">
           <div>
-            <h1>Bienvenido/a</h1>
-            <p>Gestiona tus citas y cotizaciones desde aquí</p>
+            <h1>Hola, {user?.name?.split(' ')[0] || 'Cliente'}</h1>
+            <p>Gestiona tus citas y servicios desde aquí</p>
           </div>
           <div className="client-dash__actions">
-            <Link to="/agendar" className="btn btn--primary">Nueva Cita</Link>
+            <Link to="/agendar" className="btn btn--primary"><PlusCircle size={18} style={{marginRight: '8px'}} />Nueva Cita</Link>
           </div>
         </div>
 
         <h2 className="client-dash__section-title">
-          <Calendar size={20} /> Próximas Citas
+          <Calendar size={20} /> Mis Citas
         </h2>
-        <div className="apt-grid">
-          {appointments.map(apt => (
-            <div key={apt.id} className="apt-card card">
-              <div className={`badge badge--${statusClass[apt.status]}`}>
-                {statusLabels[apt.status]}
-              </div>
-              <h3>{apt.service}</h3>
-              <div className="apt-card__info">
-                <span><Clock size={14} /> {apt.date}</span>
-                <span><MapPin size={14} /> {apt.location}</span>
-              </div>
-              <Link to={`/mi-panel/citas/${apt.id}`} className="btn btn--secondary btn--sm">
-                {apt.status === 'completed' ? 'Calificar' : 'Ver Detalles'} <ChevronRight size={14} />
-              </Link>
-            </div>
-          ))}
-        </div>
 
-        <h2 className="client-dash__section-title">
-          <FileText size={20} /> Cotizaciones Recientes
-        </h2>
-        <div className="quot-table card">
-          <table>
-            <thead>
-              <tr>
-                <th>Nº</th>
-                <th>Servicio</th>
-                <th>Fecha</th>
-                <th>Monto</th>
-                <th>Estado</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {quotations.map(q => (
-                <tr key={q.id}>
-                  <td className="quot-id">{q.id}</td>
-                  <td>{q.service}</td>
-                  <td>{q.date}</td>
-                  <td className="quot-amount">{q.amount}</td>
-                  <td><span className={`badge badge--${statusClass[q.status]}`}>{statusLabels[q.status]}</span></td>
-                  <td><Link to={`/mi-panel/cotizaciones/${q.id}`} className="btn btn--secondary btn--sm">Ver</Link></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <h2 className="client-dash__section-title">
-          <Bell size={20} /> Notificaciones
-        </h2>
-        <div className="notif-list">
-          {notifications.map((n, i) => (
-            <div key={i} className="notif-item card">
-              <span className="notif-icon">{n.icon}</span>
-              <div className="notif-body">
-                <p>{n.text}</p>
-                <span className="notif-time">{n.time}</span>
+        {appointments.length === 0 ? (
+          <div className="empty-state card" style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <Calendar size={48} style={{ color: '#ccc', marginBottom: '20px' }} />
+            <h3 style={{ marginBottom: '10px' }}>Aún no tienes citas agendadas</h3>
+            <p style={{ color: '#666', marginBottom: '25px', maxWidth: '400px', margin: '0 auto 25px' }}>
+              Nosotros nos encargamos del trabajo duro por ti. Solicita tu primer servicio de limpieza o mantenimiento hoy mismo.
+            </p>
+            <Link to="/agendar" className="btn btn--primary">Agendar mi primera cita</Link>
+          </div>
+        ) : (
+          <div className="apt-grid">
+            {appointments.map(apt => (
+              <div key={apt.id} className="apt-card card">
+                <div className={`badge badge--${statusClass[apt.status] || 'pending'}`}>
+                  {statusLabels[apt.status] || apt.status}
+                </div>
+                <h3 style={{ fontSize: '1.1rem', margin: '15px 0 10px' }}>{apt.service}</h3>
+                <div className="apt-card__info" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px', color: '#555', fontSize: '0.9rem' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Clock size={16} /> {apt.date}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><MapPin size={16} /> {apt.location}</span>
+                </div>
+                <Link to={`/mi-panel/citas/${apt.id}`} className="btn btn--secondary btn--sm" style={{ width: '100%', textAlign: 'center' }}>
+                  {apt.status === 'completed' ? 'Calificar Servicio' : 'Ver Estado / Pagar'} <ChevronRight size={16} />
+                </Link>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

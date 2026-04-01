@@ -9,76 +9,102 @@ This skill documents how to build the n8n workflow that generates and sends quot
 
 ---
 
-## Trigger Context
+## Webhooks Available
 
-The frontend (`src/services/api.js`) calls this webhook when an admin clicks "Enviar al Cliente" in the Quotation Builder:
+| Webhook | Method | Purpose |
+|---------|--------|---------|
+| `/generate-quotation-pdf` | POST | Generate PDF and save to Storage |
+| `/send-quotation` | POST | Send PDF via email to client |
+
+---
+
+## 1. Generate PDF Webhook
+
+### Trigger Context
+
+The frontend (`src/services/api.js`) calls this webhook when an admin clicks "Generar PDF" in the Quotation Builder:
 
 ```
-POST {N8N_BASE_URL}/send-quotation
+POST {N8N_BASE_URL}/generate-quotation-pdf
 Content-Type: application/json
 ```
 
 ### Incoming Payload
 ```json
 {
-  "quoteId": "uuid-of-quotation"
+  "quoteId": "uuid-of-quotation",
+  "regenerate": false,
+  "sendAfterGenerate": false
 }
 ```
 
-> **Note:** The frontend already updates the quotation status to `sent` in Supabase before calling this webhook. This workflow only needs to generate the PDF and email it.
+> **Note:** If `regenerate: true`, the workflow will increment the version and overwrite the previous PDF.
 
 ---
 
-## Workflow Pattern
+### Workflow Pattern
 
 ```
-Webhook (POST /send-quotation)
-  → Supabase: Fetch Quotation (quotations + quotation_items)
-  → Supabase: Fetch Client Profile (profiles table)
-  → Supabase: Fetch Appointment Details (appointments table)
+Webhook (POST /generate-quotation-pdf)
+  → Supabase: Fetch Quotation + Items + Client
+  → Supabase: Get Current PDF Version
   → Code Node: Build HTML Invoice
-  → HTML to PDF (via Gotenberg, Puppeteer, or external API)
-  → Send Email with PDF Attachment
-  → Respond to Webhook: { success: true }
+  → HTML to PDF (via Gotenberg or external API)
+  → Supabase Storage: Upload PDF (bucket: lap_documents)
+  → Supabase: Update quotation (pdf_url, pdf_version, pdf_generated_at)
+  → Optional: Send Email (if sendAfterGenerate: true)
+  → Respond: { success: true, pdf_url, version }
 ```
 
 ---
 
-## Node Configuration
+### Node Configuration
 
-### 1. Webhook Node
+#### 1. Webhook Node
 - **Method:** POST
-- **Path:** `/send-quotation`
+- **Path:** `/generate-quotation-pdf`
 - **Response Mode:** `responseNode`
 
-### 2. Supabase Node — Fetch Quotation + Items
-Use two sequential nodes:
-
-**Node A: Fetch Quote**
+#### 2. Supabase Node — Fetch Full Quotation
 ```
 Table: quotations
 Filter: id = {{ $json.body.quoteId }}
 ```
 
-**Node B: Fetch Items**
+Then chain to fetch items:
 ```
 Table: quotation_items
 Filter: quotation_id = {{ quote.id }}
-Order: concept ASC
+Order: created_at ASC
 ```
 
-### 3. Supabase Node — Fetch Client
+And fetch client:
 ```
 Table: profiles
 Filter: id = {{ quote.client_id }}
 ```
 
-### 4. Code Node — Build HTML Invoice
+#### 3. Supabase Node — Get Current Version
+```
+Table: quotations
+Filter: id = {{ $json.body.quoteId }}
+Select: pdf_version
+```
+
+#### 4. Code Node — Build Filename and HTML Invoice
 
 ```javascript
 const quote = $('Fetch Quote').item.json;
 const items = $('Fetch Items').all().map(i => i.json);
 const client = $('Fetch Client').item.json;
+const regenerate = $('Webhook').item.json.body.regenerate || false;
+
+const currentVersion = quote.pdf_version || 1;
+const newVersion = regenerate ? currentVersion + 1 : currentVersion;
+
+const date = new Date(quote.created_at).toISOString().split('T')[0];
+const clientName = (client.name || 'Cliente').replace(/[^a-zA-Z0-9]/g, '_');
+const fileName = `${clientName}_${date}_v${newVersion}.pdf`;
 
 const itemsHtml = items.map(item => `
   <tr>
@@ -147,10 +173,19 @@ const html = `
 </html>
 `;
 
-return [{ json: { html, clientEmail: client.email, clientName: client.name, quoteId: quote.id } }];
+return [{ 
+  json: { 
+    html, 
+    clientEmail: client.email, 
+    clientName: client.name, 
+    quoteId: quote.id,
+    fileName,
+    newVersion
+  } 
+}];
 ```
 
-### 5. HTML to PDF Conversion
+#### 5. HTML to PDF Conversion
 
 **Option A: Gotenberg (Self-hosted)**
 ```
@@ -169,29 +204,86 @@ HTTP Request Node:
   Body: { "html": "{{ $json.html }}", "apiKey": "YOUR_KEY" }
 ```
 
-### 6. Send Email with Attachment
+#### 6. Supabase Storage — Upload PDF
+```
+Bucket: lap_documents
+Path: quotations/{{ $json.fileName }}
+File: {{ $binary.data }}
+```
+
+#### 7. Supabase — Update Quotation
+```
+Table: quotations
+Filter: id = {{ $json.quoteId }}
+Update:
+  pdf_url: https://ntcdwswelewwxmyuhbtr.supabase.co/storage/v1/object/public/lap_documents/quotations/{{ $json.fileName }}
+  pdf_version: {{ $json.newVersion }}
+  pdf_generated_at: {{ $now }}
+```
+
+#### 8. Optional: Send Email (if sendAfterGenerate: true)
+Use an IF node to check `sendAfterGenerate`:
 - **To:** `{{ $json.clientEmail }}`
 - **Subject:** `Cotización LAP Services PTY — Nº {{ $json.quoteId.substring(0,8) }}`
-- **Body:**
-```html
-<p>Hola {{ $json.clientName }},</p>
-<p>Adjunto encontrarás la cotización para los servicios solicitados.</p>
-<p>Puedes aceptar o rechazar la cotización desde tu panel de cliente.</p>
-<br>
-<p>— LAP Services PTY</p>
-```
-- **Attachment:** PDF binary from the previous node
+- **Attachment:** PDF binary
 
-### 7. Respond to Webhook
+#### 9. Respond to Webhook
 - **Response Code:** 200
-- **Body:** `{ "success": true }`
+- **Body:** 
+```json
+{
+  "success": true,
+  "pdf_url": "https://.../lap_documents/quotations/...",
+  "version": {{ $json.newVersion }}
+}
+```
 
 ---
 
-## Tax Reference (ITBMS - Panamá)
+## 2. Send Quotation Webhook (Modified)
+
+### Incoming Payload
+```json
+{
+  "quoteId": "uuid-of-quotation"
+}
+```
+
+> **Note:** This webhook now checks if PDF exists. If not, it calls the generate workflow first.
+
+### Workflow Pattern
+
+```
+Webhook (POST /send-quotation)
+  → Supabase: Fetch Quotation (check pdf_url)
+  → IF: pdf_url exists
+    → Continue to send email
+  → ELSE
+    → Call /generate-quotation-pdf (via HTTP Request)
+  → Send Email with PDF Attachment
+  → Respond: { success: true }
+```
+
+---
+
+## 3. Tax Reference (ITBMS - Panamá)
 - Standard rate: **7%**
 - Already calculated by the frontend and stored in Supabase
 - The PDF just formats the pre-calculated values
+
+---
+
+## 4. Storage Bucket Configuration
+
+### Bucket: `lap_documents`
+- **Type:** Private
+- **File size limit:** 10MB
+- **Allowed MIME types:** application/pdf
+
+### RLS Policies Required:
+1. **Admins can upload** — INSERT with role = 'admin'
+2. **Admins can view all** — SELECT with role = 'admin'  
+3. **Clients can view own** — SELECT if pdf_url matches their quotation
 
 ---
 

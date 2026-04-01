@@ -1,16 +1,50 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, Mail, Phone, Calendar } from 'lucide-react'
-
-const clients = [
-  { id: 1, name: 'María García', email: 'maria.garcia@email.com', phone: '+507 6XXX-1234', appointments: 5, lastVisit: '27 Mar 2026' },
-  { id: 2, name: 'Carlos López', email: 'carlos.lopez@email.com', phone: '+507 6XXX-5678', appointments: 3, lastVisit: '25 Mar 2026' },
-  { id: 3, name: 'Ana Rodríguez', email: 'ana.rodriguez@email.com', phone: '+507 6XXX-9012', appointments: 8, lastVisit: '22 Mar 2026' },
-  { id: 4, name: 'Pedro Martínez', email: 'pedro.martinez@email.com', phone: '+507 6XXX-3456', appointments: 2, lastVisit: '20 Mar 2026' },
-  { id: 5, name: 'Laura Sánchez', email: 'laura.sanchez@email.com', phone: '+507 6XXX-7890', appointments: 1, lastVisit: '18 Mar 2026' },
-]
+import { getAllClients, getAllAppointments } from '../../services/api'
 
 export default function AdminClients() {
+  const [clients, setClients] = useState([])
   const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchClients() {
+      try {
+        const [clientsData, aptsData] = await Promise.all([
+          getAllClients(),
+          getAllAppointments()
+        ])
+
+        const formatted = clientsData.map(c => {
+          const clientApts = aptsData.filter(a => a.client_id === c.id)
+          const latestApt = clientApts.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0]
+          
+          let lastVisit = 'Sin visitas'
+          if (latestApt?.appointment_date) {
+             const [y, m, d] = latestApt.appointment_date.split('-')
+             const dateObj = new Date(y, m - 1, d)
+             lastVisit = dateObj.toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: 'numeric' })
+          }
+
+          return {
+            id: c.id,
+            name: c.name || 'Sin Nombre',
+            email: c.email || 'Sin correo',
+            phone: c.phone || 'Sin número',
+            appointments: clientApts.length,
+            lastVisit
+          }
+        })
+        setClients(formatted)
+      } catch (err) {
+        console.error('Error fetching clients', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchClients()
+  }, [])
+
   const filtered = clients.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase()))
 
   return (
@@ -28,11 +62,15 @@ export default function AdminClients() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 'var(--space-5)' }}>
-        {filtered.map(c => (
+        {loading ? (
+           <p style={{ padding: '20px', color: '#666' }}>Cargando clientes...</p>
+        ) : filtered.length === 0 ? (
+           <p style={{ padding: '20px', color: '#666' }}>No se encontraron clientes.</p>
+        ) : filtered.map(c => (
           <div key={c.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
               <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--primary-gradient)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.1rem', flexShrink: 0 }}>
-                {c.name[0]}
+                {c.name !== 'Sin Nombre' ? c.name[0]?.toUpperCase() : '?'}
               </div>
               <div>
                 <strong style={{ fontSize: '1rem' }}>{c.name}</strong>

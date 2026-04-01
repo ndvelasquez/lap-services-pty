@@ -1,0 +1,26 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "mcp": {
+        "supabase": {
+            "type": "remote",
+            "url": "https://mcp.supabase.com/mcp",
+            "enabled": true,
+            "headers": {
+                "Authorization": "Bearer {env:SUPABASE_ACCESS_TOKEN}"
+            },
+        },
+        "n8n": {
+            "type": "local",
+            "command": [
+                "npx",
+                "-y",
+                "@n8n/n8n-mcp"
+            ],
+            "enabled": true,
+            "environment": {
+                "N8N_HOST": "{env:N8N_HOST}",
+                "N8N_API_KEY": "{env:N8N_API_KEY}"
+            }
+        }
+    }
+}

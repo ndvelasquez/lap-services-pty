@@ -1,0 +1,408 @@
+{
+  "name": "LAP - Generar PDF Cotización",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "generate-quotation-pdf",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "wh-generate-pdf",
+      "name": "Webhook Generate PDF",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/quotations?id=eq.{{ $json.query.quotation_id }}&select=*",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "fetch-quote",
+      "name": "Fetch Quotation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        300
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "gsQUFcI43y3e2L9D",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/profiles?id=eq.{{ $json.client_id }}&select=*",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi"
+      },
+      "id": "fetch-client",
+      "name": "Fetch Client",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "gsQUFcI43y3e2L9D",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/quotation_items?quotation_id=eq.{{ $('Fetch Quotation').item.json.id }}&select=*",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi"
+      },
+      "id": "fetch-items",
+      "name": "Fetch Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "gsQUFcI43y3e2L9D",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const quote = $('Fetch Quotation').first().json;\nconst client = $('Fetch Client').first().json;\nconst items = $('Fetch Items').all().map(i => i.json);\n\nreturn [{\n  json: {\n    document: {\n      document_template_id: \"969D81C2-BA26-4F6A-97A2-5CD1E612F87D\",\n      payload: {\n        quote_number: quote.id.substring(0,8).toUpperCase(),\n        date: new Date().toLocaleDateString('es-PA'),\n        client_name: client.name,\n        client_email: client.email,\n        client_phone: client.phone || '',\n        subtotal: quote.subtotal.toFixed(2),\n        tax: quote.tax.toFixed(2),\n        total: quote.total.toFixed(2),\n        conditions: quote.conditions || '',\n        items: items.map(i => ({\n          concept: i.concept,\n          description: i.description,\n          quantity: i.quantity,\n          unit_price: i.unit_price.toFixed(2),\n          subtotal: i.subtotal.toFixed(2)\n        }))\n      },\n      status: \"pending\",\n      meta: { quoteId: quote.id }\n    },\n    quoteId: quote.id\n  }\n}];"
+      },
+      "id": "prepare-payload",
+      "name": "Prepare Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.pdfmonkey.io/api/v1/documents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer TY8pHuwBHW644uRbVBk4"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.document) }}",
+        "options": {}
+      },
+      "id": "create-doc",
+      "name": "Create PDFMonkey Doc",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 12,
+        "unit": "seconds"
+      },
+      "id": "wait-for-gen",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.pdfmonkey.io/api/v1/documents/{{ $('Create PDFMonkey Doc').item.json.document.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer TY8pHuwBHW644uRbVBk4"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-status",
+      "name": "Check Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.document.download_url }}",
+        "responseFormat": "file",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "download-file",
+      "name": "Download PDF File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/storage/v1/object/lap_quotations/Cotizacion_{{ $('Prepare Payload').item.json.quoteId }}.pdf",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/pdf"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyType": "binary",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "upload-supabase",
+      "name": "Upload to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        300
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "gsQUFcI43y3e2L9D",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/quotations?id=eq.{{ $('Prepare Payload').item.json.quoteId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"pdf_url\": \"https://ntcdwswelewwxmyuhbtr.supabase.co/storage/v1/object/public/lap_quotations/Cotizacion_{{ $('Prepare Payload').item.json.quoteId }}.pdf\",\n  \"status\": \"draft\"\n}",
+        "options": {}
+      },
+      "id": "update-quote-db",
+      "name": "Update Quotation DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        300
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "gsQUFcI43y3e2L9D",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"PDF generated and saved successfully\",\n  \"quotation_id\": \"{{ $('Prepare Payload').item.json.quoteId }}\"\n}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Generate PDF": {
+      "main": [
+        [
+          {
+            "node": "fetch-quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-quote": {
+      "main": [
+        [
+          {
+            "node": "fetch-client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-client": {
+      "main": [
+        [
+          {
+            "node": "fetch-items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-items": {
+      "main": [
+        [
+          {
+            "node": "prepare-payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare-payload": {
+      "main": [
+        [
+          {
+            "node": "create-doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create-doc": {
+      "main": [
+        [
+          {
+            "node": "wait-for-gen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "wait-for-gen": {
+      "main": [
+        [
+          {
+            "node": "check-status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-status": {
+      "main": [
+        [
+          {
+            "node": "download-file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "download-file": {
+      "main": [
+        [
+          {
+            "node": "upload-supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "upload-supabase": {
+      "main": [
+        [
+          {
+            "node": "update-quote-db",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update-quote-db": {
+      "main": [
+        [
+          {
+            "node": "respond-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

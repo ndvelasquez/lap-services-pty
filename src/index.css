@@ -426,6 +426,15 @@ ul, ol {
   50% { transform: translateY(-8px); }
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
 .animate-fadeInUp {
   animation: fadeInUp 0.6s ease forwards;
 }
@@ -480,6 +489,7 @@ ul, ol {
   background: var(--light-200);
 }
 
+
 ::-webkit-scrollbar-thumb {
   background: var(--light-400);
   border-radius: var(--radius-full);
@@ -487,4 +497,165 @@ ul, ol {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--dark-400);
+}
+
+/* ═══════════════════════════════════════════════
+   Fullscreen Loader Overlay
+   ═══════════════════════════════════════════════ */
+
+.fullscreen-loader-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: loaderFadeIn 0.3s ease-out;
+}
+
+.fullscreen-loader-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 56px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(76, 175, 80, 0.15);
+  max-width: 360px;
+  text-align: center;
+}
+
+.fullscreen-loader-animation {
+  margin-bottom: 8px;
+}
+
+.fullscreen-loader-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--dark-800);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.fullscreen-loader-sub {
+  font-size: 0.875rem;
+  color: var(--dark-400);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.fullscreen-loader-dots {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.fullscreen-loader-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: loaderDot 1.4s ease-in-out infinite;
+}
+
+.fullscreen-loader-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.fullscreen-loader-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes loaderFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes loaderDot {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.7); }
+  40% { opacity: 1; transform: scale(1.1); }
+}
+
+/* ═══════════════════════════════════════════════
+   SweetAlert2 – LAP Brand Theme
+   ═══════════════════════════════════════════════ */
+
+.swal-lap-popup {
+  border-radius: var(--radius-xl) !important;
+  padding: 2rem 2rem 1.5rem !important;
+  font-family: var(--font-sans) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.2) !important;
+}
+
+.swal-lap-title {
+  font-size: 1.35rem !important;
+  font-weight: 700 !important;
+  color: var(--dark-800) !important;
+  letter-spacing: -0.02em !important;
+}
+
+.swal-lap-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 24px;
+  border-radius: var(--radius-lg);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  min-width: 110px;
+}
+
+.swal-lap-btn--confirm {
+  background: var(--primary);
+  color: white;
+}
+
+.swal-lap-btn--confirm:hover {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.35);
+}
+
+.swal-lap-btn--cancel {
+  background: var(--light-300);
+  color: var(--dark-600);
+}
+
+.swal-lap-btn--cancel:hover {
+  background: var(--light-400);
+}
+
+.swal-lap-btn--deny {
+  background: #d32f2f;
+  color: white;
+}
+
+.swal-lap-btn--deny:hover {
+  background: #b71c1c;
+}
+
+/* ═══════════════════════════════════════════════
+   Sonner Toaster Overrides
+   ═══════════════════════════════════════════════ */
+
+[data-sonner-toaster] [data-sonner-toast] {
+  font-family: var(--font-sans);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-type="success"] {
+  border-left: 4px solid var(--primary);
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-type="error"] {
+  border-left: 4px solid #d32f2f;
 }

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+export { supabase }
 
 // ============================================================
 // n8n WEBHOOKS
@@ -6,17 +7,33 @@ import { supabase } from '../lib/supabase'
 // ============================================================
 const N8N_BASE_URL = import.meta.env.VITE_N8N_BASE_URL || 'http://localhost:5678/webhook'
 
-async function triggerN8nWebhook(endpoint, data) {
+async function triggerN8nWebhook(endpoint, data, method = 'POST') {
   try {
-    const res = await fetch(`${N8N_BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+    // We use the Supabase Edge Function as a proxy to n8n
+    // This solves CORS issues and allows us to keep the n8n URL private
+    const { data: res, error } = await supabase.functions.invoke('n8n-proxy', {
+      body: { 
+        endpoint,
+        method,
+        params: data 
+      }
     })
-    return res.ok
+    
+    if (error) {
+      console.error(`Edge Function proxy error for ${endpoint}:`, error)
+      throw new Error(`Error de red al conectar con el servidor de automatización: ${error.message}`)
+    }
+
+    // The proxy returns the n8n response. If n8n returns an error field, we throw.
+    if (res && res.error) {
+       console.error(`n8n error for ${endpoint}:`, res.error)
+       throw new Error(`Error en el servidor de automatización: ${res.error}`)
+    }
+    
+    return res
   } catch (error) {
-    console.warn(`n8n webhook failed at ${endpoint}`, error)
-    return false
+    console.error(`n8n proxy failed at ${endpoint}:`, error)
+    throw error
   }
 }
 
@@ -38,16 +55,29 @@ export async function register(userData) {
     options: {
       data: {
         full_name: userData.name,
-        phone: userData.phone
+        phone: userData.phone,
+        address: userData.address
       }
     }
   })
   if (error) throw error
 
+  // 2. Detectar email duplicado.
+  // Cuando la confirmación de email está habilitada, Supabase NO devuelve error
+  // si el email ya existe. En su lugar, devuelve un usuario "obfuscado" con
+  // identities vacío y sin sesión. Esto previene ataques de enumeración de emails.
+  // Ref: https://supabase.com/docs/guides/auth/auth-identity-linking#can-you-sign-up-with-email-if-already-using-oauth
+  if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+    throw new Error('Este correo electrónico ya se encuentra registrado. Por favor, inicia sesión o utiliza otro correo.')
+  }
+
   // Nota: El trigger creado en SQL se encargará de crear el perfil automáticamente.
-  // Sin embargo, podemos hacer un UPDATE para rellenar la dirección si hace falta:
+  // Como la confirmación de email está encendida en Supabase, el registro devuelve una sesión nula.
+  // Por ende, la política RLS va a bloquear cualquier UPDATE a la tabla perfiles desde aquí.
+  // La dirección ha sido empujada al raw_user_meta_data arriba para el trigger.
   if (data.user && userData.address) {
-    await supabase.from('profiles').update({ address: userData.address }).eq('id', data.user.id)
+    const { error: updErr } = await supabase.from('profiles').update({ address: userData.address }).eq('id', data.user.id)
+    if (updErr) console.log('RLS Update failed as expected for unauth signup:', updErr.message)
   }
 
   // Desencadenar un webhook n8n de "Bienvenida" si lo deseas
@@ -65,14 +95,19 @@ export async function getCurrentUser() {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return null
 
-  // Fetch full profile info
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', session.user.id)
-    .single()
+  try {
+    // Fetch full profile info
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single()
 
-  return profile || session.user
+    return profile || session.user
+  } catch (err) {
+    console.warn('Profile fetch error normally ignored:', err)
+    return session.user
+  }
 }
 
 // ============================================================
@@ -83,13 +118,18 @@ export async function createAppointment(appData) {
   const { clientId, date, time, location, notes, services, customDetails, images } = appData
   
   // 1. Insertar Cita cabecera
+  const [hours, minutes] = time.split(':')
+  const endHours = parseInt(hours, 10) + 2
+  const formattedEndHours = endHours >= 24 ? '23' : String(endHours).padStart(2, '0') // Evita horas > 23
+  const endTime = `${formattedEndHours}:${minutes}:00`
+
   const { data: appointment, error: aptError } = await supabase
     .from('appointments')
     .insert([{
       client_id: clientId,
       appointment_date: date,
       start_time: time,
-      end_time: `${parseInt(time.split(':')[0]) + 2}:00`, // Asume 2h por defecto, puedes calcularlo
+      end_time: endTime,
       location_address: location,
       notes: notes,
       status: 'pending'
@@ -97,24 +137,56 @@ export async function createAppointment(appData) {
     .select()
     .single()
 
-  if (aptError) throw aptError
+  if (aptError) {
+    console.error('Error creating appointment header:', aptError)
+    throw aptError
+  }
 
   // 2. Insertar los servicios dentro de esa cita
   const servicesToInsert = services.map(sId => ({
     appointment_id: appointment.id,
     service_id: sId,
     custom_details: customDetails,
-    images: images || []
+    images: Array.isArray(images) ? images : []
   }))
 
   const { error: srvError } = await supabase
     .from('appointment_services')
     .insert(servicesToInsert)
 
-  if (srvError) throw srvError
+  if (srvError) {
+    console.error('Error creating appointment services:', srvError)
+    throw srvError
+  }
 
-  // 3. Informar a n8n para que envíe correo de "Cita Recibida"
-  triggerN8nWebhook('/new-appointment', { appointment, services })
+  // Fetch client profile for the webhook
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('name, email, phone')
+    .eq('id', clientId)
+    .single()
+
+  const clientName = profile?.name || 'Cliente'
+  const clientEmail = profile?.email || ''
+  const clientPhone = profile?.phone || ''
+
+  // Fetch service names for the email
+  const { data: servicesData } = await supabase
+    .from('services')
+    .select('name')
+    .in('id', services)
+  const serviceNames = servicesData?.map(s => s.name) || []
+
+  // 3. Notificar vía n8n (o cualquier otro sistema externo)
+  try {
+    await triggerN8nWebhook('/new-appointment', { 
+      appointment, 
+      client: { name: clientName, email: clientEmail, phone: clientPhone },
+      services: servicesToInsert 
+    })
+  } catch (error) {
+    console.warn('Webhook notification failed, but appointment was created:', error)
+  }
 
   return appointment
 }
@@ -132,8 +204,28 @@ export async function getClientAppointments(clientId) {
 export async function getAllAppointments() {
   const { data, error } = await supabase
     .from('appointments')
-    .select('*, profiles(name), appointment_services(services(name))')
+    .select('*, profiles(name, phone, email, address), appointment_services(services(name), custom_details, images)')
     .order('appointment_date', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function getAppointment(id) {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('*, profiles(name, phone, email, address), appointment_services(services(name), custom_details, images)')
+    .eq('id', id)
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function getAllClients() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .neq('role', 'admin')
+    .order('created_at', { ascending: false })
   if (error) throw error
   return data
 }
@@ -158,11 +250,100 @@ export async function updateAppointment(id, updates) {
 // QUOTATIONS - Cotizaciones en Supabase
 // ============================================================
 
+export async function getQuotationById(quoteId) {
+  const { data: quote, error } = await supabase
+    .from('quotations')
+    .select('*')
+    .eq('id', quoteId)
+    .single()
+  if (error) throw error
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('name, email, phone')
+    .eq('id', quote.client_id)
+    .single()
+
+  let appointmentData = null
+  if (quote.appointment_id) {
+    const { data: appointment } = await supabase
+      .from('appointments')
+      .select('appointment_date, start_time, location_address, appointment_services(custom_details, services(name))')
+      .eq('id', quote.appointment_id)
+      .single()
+    appointmentData = appointment
+  }
+
+  const { data: items } = await supabase
+    .from('quotation_items')
+    .select('*')
+    .eq('quotation_id', quoteId)
+    .order('id', { ascending: true })
+
+  return { 
+    ...quote, 
+    profiles: profile,
+    appointments: appointmentData,
+    items: items || [] 
+  }
+}
+
+export async function updateQuotation(quoteId, data) {
+  const { subtotal = 0, tax = 0, total = 0, items, conditions } = data
+  const subtotalVal = Number(Number(subtotal).toFixed(2))
+  const taxVal = Number(Number(tax).toFixed(2))
+  const totalVal = Number(Number(total).toFixed(2))
+
+  const { error: updateError } = await supabase
+    .from('quotations')
+    .update({ conditions, subtotal: subtotalVal, tax: taxVal, total: totalVal })
+    .eq('id', quoteId)
+
+  if (updateError) throw updateError
+
+  if (items) {
+    await supabase.from('quotation_items').delete().eq('quotation_id', quoteId)
+
+    const itemsToInsert = items.map(i => ({
+      quotation_id: quoteId,
+      concept: i.concept,
+      description: i.description,
+      quantity: i.quantity,
+      unit_price: i.unitPrice,
+      subtotal: i.quantity * i.unitPrice
+    }))
+
+    const { error: itemsError } = await supabase
+      .from('quotation_items')
+      .insert(itemsToInsert)
+
+    if (itemsError) throw itemsError
+  }
+
+  return await getQuotationById(quoteId)
+}
+
+export async function generateQuotationPdf(quotationId) {
+  const result = await triggerN8nWebhook('/gen-quotation-pdf-v5', { 
+    quoteId: quotationId, 
+    regenerate: false 
+  }, 'POST')
+  return result
+}
+
+export async function regenerateQuotationPdf(quotationId) {
+  const result = await triggerN8nWebhook('/gen-quotation-pdf-v5', { 
+    quoteId: quotationId, 
+    regenerate: true 
+  }, 'POST')
+  return result
+}
+
 export async function createQuotation(data) {
   const { appointmentId, clientId, items, conditions, taxRate } = data
-  const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0)
-  const tax = subtotal * taxRate
-  const total = subtotal + tax
+  const subtotal = Number(items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0).toFixed(2))
+  const tax = Number((subtotal * taxRate).toFixed(2))
+  const total = Number((subtotal + tax).toFixed(2))
 
   // 1. Insert Quote
   const { data: quote, error: quoteError } = await supabase
@@ -199,8 +380,17 @@ export async function createQuotation(data) {
 export async function getClientQuotations(clientId) {
   const { data, error } = await supabase
     .from('quotations')
-    .select('id, subtotal, total, status, created_at, appointments(appointment_date)')
+    .select('*, appointments(appointment_date)')
     .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function getAllQuotations() {
+  const { data, error } = await supabase
+    .from('quotations')
+    .select('*, profiles(name, email), appointments(appointment_date)')
     .order('created_at', { ascending: false })
   if (error) throw error
   return data
@@ -208,11 +398,31 @@ export async function getClientQuotations(clientId) {
 
 // Sends quotation via external logic (n8n Webhook)
 export async function sendQuotation(quoteId) {
-  // Pasa del estado 'draft' a 'sent'
-  await supabase.from('quotations').update({ status: 'sent' }).eq('id', quoteId)
-  
-  // N8N se encargará de generar el PDF y enviarlo por email
-  return await triggerN8nWebhook('/send-quotation', { quoteId })
+  const { data: quote } = await supabase
+    .from('quotations')
+    .select('pdf_url, status, appointment_id')
+    .eq('id', quoteId)
+    .single()
+
+  if (!quote) throw new Error('Quotation not found')
+
+  if (!quote.pdf_url) {
+    await triggerN8nWebhook('/gen-quotation-pdf-v5', { 
+      quoteId: quoteId, 
+      regenerate: false 
+    }, 'POST')
+  } else {
+    await triggerN8nWebhook('/send-quotation', { quoteId: quoteId })
+  }
+
+  if (quote.status === 'draft') {
+    await supabase.from('quotations').update({ status: 'sent' }).eq('id', quoteId)
+  }
+  if (quote.appointment_id) {
+    await updateAppointment(quote.appointment_id, { status: 'quotation_sent' })
+  }
+
+  return { success: true }
 }
 
 // ============================================================
@@ -259,18 +469,25 @@ export async function getClients() {
 export async function uploadImages(files) {
   const urls = []
   
+  if (!files || files.length === 0) return { urls }
+
   for (const file of files) {
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${Math.random()}.${fileExt}`
+    // Generate unique name: timestamp + random string + original extension
+    const fileExt = file.name ? file.name.split('.').pop() : 'jpg'
+    const randomStr = Math.random().toString(36).substring(7)
+    const fileName = `${Date.now()}-${randomStr}.${fileExt}`
     const filePath = `uploads/${fileName}`
 
-    const { error: uploadError, data } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('lap_images')
-      .upload(filePath, file)
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      })
 
     if (uploadError) {
       console.error('Upload Error:', uploadError.message)
-      continue
+      throw new Error(`Error subiendo la imagen ${file.name}: ${uploadError.message}`)
     }
     
     // Obtener la URL pública (Asegúrate de que el bucket sea Público en Supabase)
@@ -278,7 +495,9 @@ export async function uploadImages(files) {
       .from('lap_images')
       .getPublicUrl(filePath)
       
-    urls.push(publicData.publicUrl)
+    if (publicData?.publicUrl) {
+      urls.push(publicData.publicUrl)
+    }
   }
   
   return { urls }
@@ -363,10 +582,33 @@ export async function getAvailableSlots(date) {
   return data // Array de slots ocupados para ese día
 }
 
+// Eliminar cotización (solo si está en estado draft/sent/pendiente)
+export async function deleteQuotation(quoteId) {
+  const { data: quote, error: fetchError } = await supabase
+    .from('quotations')
+    .select('status')
+    .eq('id', quoteId)
+    .single()
+  
+  if (fetchError) throw fetchError
+  if (quote.status === 'accepted') {
+    throw new Error('No se puede eliminar una cotización aceptada')
+  }
+
+  const { error } = await supabase
+    .from('quotations')
+    .delete()
+    .eq('id', quoteId)
+
+  if (error) throw error
+  return true
+}
+
 export default {
   login, register, logout, getCurrentUser,
-  createAppointment, getClientAppointments, getAllAppointments, updateAppointment,
-  createQuotation, getClientQuotations, sendQuotation,
+  createAppointment, getAppointment, getClientAppointments, getAllAppointments, updateAppointment,
+  createQuotation, getClientQuotations, getQuotationById, updateQuotation, deleteQuotation,
+  generateQuotationPdf, regenerateQuotationPdf, sendQuotation,
   acceptQuotation, rejectQuotation, requestModification,
   uploadPaymentProof, getAvailableSlots,
   getServices, createService, getClients, uploadImages

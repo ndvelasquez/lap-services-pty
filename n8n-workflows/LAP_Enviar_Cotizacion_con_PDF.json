@@ -1,0 +1,181 @@
+{
+  "name": "LAP - Enviar Cotización con PDF",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-quotation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-send-quote",
+      "name": "Webhook Enviar Cotizacion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/quotations?id=eq.{{ $json.body.quoteId }}&select=*",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "fetch-quote",
+      "name": "Fetch Quotation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        300
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "gsQUFcI43y3e2L9D",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/profiles?id=eq.{{ $json.client_id }}&select=name,email,phone",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "fetch-client",
+      "name": "Fetch Client",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "gsQUFcI43y3e2L9D",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Fetch Quotation').first().json.pdf_url }}",
+        "responseFormat": "file",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      },
+      "id": "download-pdf",
+      "name": "Descargar PDF Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "emailType": "html",
+        "fromEmail": "noreply@lapservicepty.com",
+        "toEmail": "={{ $('Fetch Client').first().json.email }}",
+        "subject": "=Cotización LAP Services PTY — Total: ${{ $('Fetch Quotation').first().json.total }}",
+        "html": "=<p>Hola {{ $('Fetch Client').first().json.name }},</p><p>Adjunto encontrarás la cotización solicitada con el detalle y condiciones aplicables.</p><p>Quedamos a tu disposición para cualquier consulta adicional.</p><p>Atentamente,<br><strong>El Equipo de LAP Services PTY</strong></p>",
+        "options": {
+          "attachments": "data"
+        }
+      },
+      "id": "email-quote",
+      "name": "Email Cotizacion con PDF",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "artdogaUIFL4Iba9",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Quotation sent successfully' }) }}",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Enviar Cotizacion": {
+      "main": [
+        [
+          {
+            "node": "Fetch Quotation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Quotation": {
+      "main": [
+        [
+          {
+            "node": "Fetch Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Client": {
+      "main": [
+        [
+          {
+            "node": "Descargar PDF Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar PDF Storage": {
+      "main": [
+        [
+          {
+            "node": "Email Cotizacion con PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Cotizacion con PDF": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}

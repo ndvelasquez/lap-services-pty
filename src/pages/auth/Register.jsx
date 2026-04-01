@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Mail, Lock, User, Phone, MapPin } from 'lucide-react'
+import { register } from '../../services/api'
+import { alertSuccess } from '../../lib/notifications'
 import './Auth.css'
 
 export default function Register() {
@@ -10,6 +12,8 @@ export default function Register() {
     name: '', email: '', phone: '', address: '',
     password: '', confirmPassword: '', terms: false
   })
+  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(false)
 
   const passStrength = () => {
     const p = form.password
@@ -20,10 +24,35 @@ export default function Register() {
     return s
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    // n8n integration point: POST /api/auth/register
-    navigate('/mi-panel')
+    if (form.password !== form.confirmPassword) {
+      return setError('Las contraseñas no coinciden')
+    }
+    setError(null)
+    setLoading(true)
+    
+    try {
+      const { session } = await register({
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        address: form.address,
+        password: form.password
+      })
+      
+      if (!session) {
+        await alertSuccess('Cuenta Creada', 'Por favor, revisa tu bandeja de entrada o spam para confirmar tu correo antes de iniciar sesión.')
+        navigate('/login')
+      } else {
+        navigate('/mi-panel')
+      }
+    } catch (err) {
+      console.error('Register error:', err)
+      setError(err.message || 'Error al crear la cuenta')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const strength = passStrength()
@@ -122,8 +151,32 @@ export default function Register() {
               <span>Acepto los <a href="#" className="auth-link">términos y condiciones</a></span>
             </label>
 
-            <button type="submit" className="btn btn--primary btn--lg auth-submit">
-              Crear Cuenta
+            {error && (
+              <div className="auth-error" style={{
+                background: 'rgba(211, 47, 47, 0.08)',
+                border: '1px solid rgba(211, 47, 47, 0.3)',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                marginBottom: '15px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '10px',
+                color: '#d32f2f',
+                fontSize: '0.9rem',
+                lineHeight: '1.4'
+              }}>
+                <span style={{ fontSize: '1.2rem', flexShrink: 0, marginTop: '1px' }}>⚠️</span>
+                <span style={{ flex: 1 }}>{error}</span>
+                <button type="button" onClick={() => setError(null)} style={{
+                  background: 'none', border: 'none', color: '#d32f2f',
+                  cursor: 'pointer', fontSize: '1.1rem', padding: 0, flexShrink: 0,
+                  lineHeight: 1, opacity: 0.7
+                }}>✕</button>
+              </div>
+            )}
+
+            <button type="submit" className="btn btn--primary btn--lg auth-submit" disabled={loading}>
+              {loading ? 'Creando cuenta...' : 'Crear Cuenta'}
             </button>
           </form>
 

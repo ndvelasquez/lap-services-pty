@@ -79,6 +79,9 @@ CREATE TABLE public.quotations (
   tax DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   conditions TEXT,
+  pdf_url TEXT,
+  pdf_version INTEGER DEFAULT 1,
+  pdf_generated_at TIMESTAMPTZ,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -147,3 +150,51 @@ CREATE POLICY "View quotation items" ON quotation_items FOR SELECT USING (
   EXISTS (SELECT 1 FROM quotations WHERE id = quotation_items.quotation_id AND (client_id = auth.uid() OR public.get_my_role() = 'admin'))
 );
 CREATE POLICY "Admins manage quote items" ON quotation_items FOR ALL USING (public.get_my_role() = 'admin');
+
+-- ========================================================================
+-- STORAGE - Bucket para documentos (PDFs de cotizaciones)
+-- ========================================================================
+
+-- Crear bucket lap_documents (privado)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('lap_documents', 'lap_documents', false, 10485760, ARRAY['application/pdf'])
+ON CONFLICT (id) DO NOTHING;
+
+-- Habilitar RLS en el bucket
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+-- Política: Solo admins pueden subir archivos
+CREATE POLICY "Admins can upload documents" ON storage.objects
+FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'lap_documents' AND 
+  (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
+);
+
+-- Política: Admins pueden ver todos los documentos
+CREATE POLICY "Admins can view all documents" ON storage.objects
+FOR SELECT TO authenticated
+USING (
+  bucket_id = 'lap_documents' AND 
+  (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
+);
+
+-- Política: Clientes pueden ver sus propios documentos (basado en quotations)
+CREATE POLICY "Clients can view own documents" ON storage.objects
+FOR SELECT TO authenticated
+USING (
+  bucket_id = 'lap_documents' AND 
+  EXISTS (
+    SELECT 1 FROM public.quotations 
+    WHERE client_id = auth.uid() 
+    AND pdf_url LIKE '%' || storage.objects.name || '%'
+  )
+);
+
+-- Política: Solo admins pueden eliminar documentos
+CREATE POLICY "Admins can delete documents" ON storage.objects
+FOR DELETE TO authenticated
+USING (
+  bucket_id = 'lap_documents' AND 
+  (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
+);

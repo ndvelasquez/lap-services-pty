@@ -1,17 +1,29 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
+import { login } from '../../services/api'
 import './Auth.css'
 
 export default function Login() {
   const navigate = useNavigate()
   const [showPass, setShowPass] = useState(false)
   const [form, setForm] = useState({ email: '', password: '', remember: false })
+  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    // n8n integration point: POST /api/auth/login
-    navigate('/mi-panel')
+    setError(null)
+    setLoading(true)
+    try {
+      await login(form.email, form.password)
+      navigate('/mi-panel')
+    } catch (err) {
+      console.error('Login error:', err)
+      setError('Credenciales incorrectas o error en el sistema')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -82,8 +94,10 @@ export default function Login() {
               <a href="#" className="auth-link">¿Olvidaste tu contraseña?</a>
             </div>
 
-            <button type="submit" className="btn btn--primary btn--lg auth-submit">
-              Iniciar Sesión
+            {error && <div className="auth-error" style={{ color: '#d32f2f', marginBottom: '15px' }}>{error}</div>}
+
+            <button type="submit" className="btn btn--primary btn--lg auth-submit" disabled={loading}>
+              {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
             </button>
           </form>
 

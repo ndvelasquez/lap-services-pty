@@ -1,26 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle, ArrowLeft, ArrowRight, Upload, X, ChevronLeft, ChevronRight, Minus, Plus, Image as ImageIcon } from 'lucide-react'
+import { getCurrentUser, createAppointment, uploadImages } from '../../services/api'
+import { alertWarning, alertSuccess, toastError } from '../../lib/notifications'
 import './BookingFlow.css'
 
 const SERVICES_LIST = [
-  { id: 'apt', cat: 'Limpieza de Espacios', name: 'Limpieza de Apartamento' },
-  { id: 'house', cat: 'Limpieza de Espacios', name: 'Limpieza de Casa' },
-  { id: 'office', cat: 'Limpieza de Espacios', name: 'Limpieza de Oficina' },
-  { id: 'post', cat: 'Limpieza de Espacios', name: 'Limpieza Post-Remodelación' },
-  { id: 'sofa', cat: 'Muebles', name: 'Limpieza de Sofás' },
-  { id: 'mattress', cat: 'Muebles', name: 'Limpieza de Colchones' },
-  { id: 'carpet', cat: 'Muebles', name: 'Limpieza de Alfombras' },
-  { id: 'chairs', cat: 'Muebles', name: 'Sillas de Oficina' },
-  { id: 'blinds', cat: 'Muebles', name: 'Persianas Rollers' },
-  { id: 'ac-split', cat: 'Aire Acondicionado', name: 'Lavado de Split' },
-  { id: 'ac-central', cat: 'Aire Acondicionado', name: 'Aire Central' },
-  { id: 'ac-install', cat: 'Aire Acondicionado', name: 'Instalación de AC' },
-  { id: 'auto-int', cat: 'Auto Detailing', name: 'Auto Detailing Interior' },
-  { id: 'auto-full', cat: 'Auto Detailing', name: 'Lavado Completo Auto' },
-  { id: 'plumbing', cat: 'Reparaciones', name: 'Plomería' },
-  { id: 'electric', cat: 'Reparaciones', name: 'Electricidad' },
-  { id: 'painting', cat: 'Reparaciones', name: 'Pintura General' },
+  { id: '00000000-0000-0000-0000-000000000001', cat: 'Limpieza de Espacios', name: 'Limpieza de Apartamento' },
+  { id: '00000000-0000-0000-0000-000000000002', cat: 'Limpieza de Espacios', name: 'Limpieza de Casa' },
+  { id: '00000000-0000-0000-0000-000000000003', cat: 'Limpieza de Espacios', name: 'Limpieza de Oficina' },
+  { id: '00000000-0000-0000-0000-000000000004', cat: 'Limpieza de Espacios', name: 'Limpieza Post-Remodelación' },
+  { id: '00000000-0000-0000-0000-000000000005', cat: 'Muebles', name: 'Limpieza de Sofás' },
+  { id: '00000000-0000-0000-0000-000000000006', cat: 'Muebles', name: 'Limpieza de Colchones' },
+  { id: '00000000-0000-0000-0000-000000000007', cat: 'Muebles', name: 'Limpieza de Alfombras' },
+  { id: '00000000-0000-0000-0000-000000000008', cat: 'Muebles', name: 'Sillas de Oficina' },
+  { id: '00000000-0000-0000-0000-000000000009', cat: 'Muebles', name: 'Persianas Rollers' },
+  { id: '00000000-0000-0000-0000-000000000010', cat: 'Aire Acondicionado', name: 'Lavado de Split' },
+  { id: '00000000-0000-0000-0000-000000000011', cat: 'Aire Acondicionado', name: 'Aire Central' },
+  { id: '00000000-0000-0000-0000-000000000012', cat: 'Aire Acondicionado', name: 'Instalación de AC' },
+  { id: '00000000-0000-0000-0000-000000000013', cat: 'Auto Detailing', name: 'Auto Detailing Interior' },
+  { id: '00000000-0000-0000-0000-000000000014', cat: 'Auto Detailing', name: 'Lavado Completo Auto' },
+  { id: '00000000-0000-0000-0000-000000000015', cat: 'Reparaciones', name: 'Plomería' },
+  { id: '00000000-0000-0000-0000-000000000016', cat: 'Reparaciones', name: 'Electricidad' },
+  { id: '00000000-0000-0000-0000-000000000017', cat: 'Reparaciones', name: 'Pintura General' },
 ]
 
 const ROOMS = ['Sala', 'Cocina', 'Comedor', 'Dormitorio Principal', 'Dormitorio 2', 'Dormitorio 3', 'Baño Principal', 'Baño 2', 'Balcón', 'Lavandería', 'Terraza']
@@ -45,6 +47,7 @@ const TIME_SLOTS = ['08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', 
 
 export default function BookingFlow() {
   const navigate = useNavigate()
+  const [user, setUser] = useState(null)
   const [step, setStep] = useState(0)
   const [selectedServices, setSelectedServices] = useState([])
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
@@ -53,10 +56,15 @@ export default function BookingFlow() {
   const [selectedTime, setSelectedTime] = useState(null)
   const [images, setImages] = useState([])
   const [notes, setNotes] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    getCurrentUser().then(setUser).catch(console.error)
+  }, [])
 
   // Detail forms state
   const [spaceDetails, setSpaceDetails] = useState({ type: 'Apartamento', sqm: '', floor: '', rooms: [] })
-  const [furnitureDetails, setFurnitureDetails] = useState({ material: '', seats: 2, pieces: 1, notes: '' })
+  const [furnitureDetails, setFurnitureDetails] = useState({ material: '', seats: 2, pieces: 1, mattressSize: 'Queen', carpetWidth: '', carpetHeight: '', carpetUnit: 'cm', notes: '' })
   const [acDetails, setAcDetails] = useState({ type: 'Split', qty: 1, brand: '', btu: '12,000' })
   const [repairDetails, setRepairDetails] = useState({ description: '' })
 
@@ -77,7 +85,7 @@ export default function BookingFlow() {
   const isDateAvailable = (day) => {
     if (!day) return false
     const d = new Date(calYear, calMonth, day)
-    return d.getDay() !== 0 && !unavailableDates.includes(day) && d >= new Date()
+    return d.getDay() !== 0 && !unavailableDates.includes(day) && d >= new Date(new Date().setHours(0,0,0,0))
   }
 
   const handleImageUpload = (e) => {
@@ -96,10 +104,59 @@ export default function BookingFlow() {
     setImages(prev => prev.filter((_, i) => i !== idx))
   }
 
-  const handleSubmit = () => {
-    // n8n integration point: POST /api/appointments
-    alert('¡Solicitud enviada! recibirás tu cotización en las próximas 24 horas.')
-    navigate('/mi-panel')
+  const handleSubmit = async () => {
+    if (!user) {
+      alertWarning('Iniciar sesión requerido', 'Debes iniciar sesión o registrarte para agendar una cita.')
+      localStorage.setItem('redirectAfterLogin', '/agendar')
+      navigate('/login')
+      return
+    }
+
+    setLoading(true)
+    try {
+      // Formatear la fecha a YYYY-MM-DD
+      const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(selectedDate).padStart(2, '0')}`
+      
+      // Formatear la hora a HH:MM:SS
+      let [timeStr, modifier] = selectedTime.split(' ')
+      let [hours, minutes] = timeStr.split(':')
+      if (hours === '12') hours = '00'
+      if (modifier === 'PM') hours = parseInt(hours, 10) + 12
+      const formattedTime = `${String(hours).padStart(2, '0')}:${minutes}:00`
+
+      const customDetails = {
+        space: hasSpaceService ? spaceDetails : null,
+        furniture: hasFurnitureService ? furnitureDetails : null,
+        ac: hasACService ? acDetails : null,
+        repair: hasRepairService ? repairDetails : null
+      }
+
+      let uploadedUrls = []
+      if (images.length > 0) {
+        const { urls } = await uploadImages(images.map(img => img.file))
+        uploadedUrls = urls
+      }
+
+      const appData = {
+        clientId: user.id,
+        date: dateStr,
+        time: formattedTime,
+        location: user.address || 'Mi domicilio',
+        notes,
+        services: selectedServices,
+        customDetails,
+        images: uploadedUrls
+      }
+
+      await createAppointment(appData)
+      await alertSuccess('¡Solicitud Enviada!', 'Recibirás tu cotización al correo pronto.')
+      navigate('/mi-panel')
+    } catch (err) {
+      console.error('Error scheduling:', err)
+      toastError(err.message || 'Error al agendar la cita. Intenta nuevamente.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const groupedServices = SERVICES_LIST.reduce((acc, s) => {
@@ -108,10 +165,16 @@ export default function BookingFlow() {
     return acc
   }, {})
 
-  const hasSpaceService = selectedServices.some(id => ['apt', 'house', 'office', 'post'].includes(id))
-  const hasFurnitureService = selectedServices.some(id => ['sofa', 'mattress', 'carpet', 'chairs', 'blinds'].includes(id))
-  const hasACService = selectedServices.some(id => ['ac-split', 'ac-central', 'ac-install'].includes(id))
-  const hasRepairService = selectedServices.some(id => ['plumbing', 'electric', 'painting'].includes(id))
+  const getCategoryFromId = (id) => SERVICES_LIST.find(s => s.id === id)?.cat
+
+  const hasSpaceService = selectedServices.some(id => getCategoryFromId(id) === 'Limpieza de Espacios')
+  const hasFurnitureService = selectedServices.some(id => getCategoryFromId(id) === 'Muebles')
+  const hasACService = selectedServices.some(id => getCategoryFromId(id) === 'Aire Acondicionado')
+  const hasRepairService = selectedServices.some(id => getCategoryFromId(id) === 'Reparaciones')
+
+  const hasSofa = selectedServices.some(id => id === '00000000-0000-0000-0000-000000000005')
+  const hasMattress = selectedServices.some(id => id === '00000000-0000-0000-0000-000000000006')
+  const hasCarpet = selectedServices.some(id => id === '00000000-0000-0000-0000-000000000007')
 
   const canNext = () => {
     if (step === 0) return selectedServices.length > 0
@@ -276,33 +339,65 @@ export default function BookingFlow() {
                 <div className="detail-section card">
                   <h3>🛋️ Limpieza de Muebles</h3>
                   <div className="detail-form">
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label className="form-label">Material</label>
-                        <select className="form-select" value={furnitureDetails.material} onChange={e => setFurnitureDetails({ ...furnitureDetails, material: e.target.value })}>
-                          <option value="">Seleccionar...</option>
-                          {FURNITURE_MATERIALS.map(m => <option key={m}>{m}</option>)}
-                        </select>
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Puestos</label>
-                        <div className="number-stepper">
-                          <button onClick={() => setFurnitureDetails(p => ({ ...p, seats: Math.max(1, p.seats - 1) }))}><Minus size={16} /></button>
-                          <span>{furnitureDetails.seats}</span>
-                          <button onClick={() => setFurnitureDetails(p => ({ ...p, seats: p.seats + 1 }))}><Plus size={16} /></button>
+                    
+                    {hasSofa && (
+                      <div className="form-row" style={{ padding: '15px', background: '#f5f7fa', borderRadius: '8px', marginBottom: '15px' }}>
+                        <div className="form-group" style={{ flex: '1 1 100%' }}><h4 style={{ margin: 0, color: 'var(--color-primary)' }}>Detalles del Sofá</h4></div>
+                        <div className="form-group">
+                          <label className="form-label">Material del sofá</label>
+                          <select className="form-select" value={furnitureDetails.material} onChange={e => setFurnitureDetails({ ...furnitureDetails, material: e.target.value })}>
+                            <option value="">Seleccionar...</option>
+                            {FURNITURE_MATERIALS.map(m => <option key={m}>{m}</option>)}
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Cantidad de piezas</label>
+                          <div className="number-stepper">
+                            <button onClick={() => setFurnitureDetails(p => ({ ...p, pieces: Math.max(1, p.pieces - 1) }))}><Minus size={16} /></button>
+                            <span>{furnitureDetails.pieces}</span>
+                            <button onClick={() => setFurnitureDetails(p => ({ ...p, pieces: p.pieces + 1 }))}><Plus size={16} /></button>
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Total de asientos/puestos</label>
+                          <div className="number-stepper">
+                            <button onClick={() => setFurnitureDetails(p => ({ ...p, seats: Math.max(1, p.seats - 1) }))}><Minus size={16} /></button>
+                            <span>{furnitureDetails.seats}</span>
+                            <button onClick={() => setFurnitureDetails(p => ({ ...p, seats: p.seats + 1 }))}><Plus size={16} /></button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Cantidad de piezas</label>
-                      <div className="number-stepper">
-                        <button onClick={() => setFurnitureDetails(p => ({ ...p, pieces: Math.max(1, p.pieces - 1) }))}><Minus size={16} /></button>
-                        <span>{furnitureDetails.pieces}</span>
-                        <button onClick={() => setFurnitureDetails(p => ({ ...p, pieces: p.pieces + 1 }))}><Plus size={16} /></button>
+                    )}
+
+                    {hasMattress && (
+                      <div className="form-row" style={{ padding: '15px', background: '#f5f7fa', borderRadius: '8px', marginBottom: '15px' }}>
+                        <div className="form-group" style={{ flex: '1 1 100%' }}><h4 style={{ margin: 0, color: 'var(--color-primary)' }}>Detalles del Colchón</h4></div>
+                        <div className="form-group">
+                          <label className="form-label">Tamaño del colchón</label>
+                          <select className="form-select" value={furnitureDetails.mattressSize} onChange={e => setFurnitureDetails({ ...furnitureDetails, mattressSize: e.target.value })}>
+                            <option>Twin</option><option>Full</option><option>Queen</option><option>King</option>
+                          </select>
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    {hasCarpet && (
+                      <div className="form-row" style={{ padding: '15px', background: '#f5f7fa', borderRadius: '8px', marginBottom: '15px' }}>
+                        <div className="form-group" style={{ flex: '1 1 100%' }}><h4 style={{ margin: 0, color: 'var(--color-primary)' }}>Medidas de Alfombra</h4></div>
+                        <div className="form-group" style={{ display: 'flex', gap: '10px' }}>
+                          <input type="number" className="form-input" placeholder="Ancho" value={furnitureDetails.carpetWidth} onChange={e => setFurnitureDetails({ ...furnitureDetails, carpetWidth: e.target.value })} style={{ width: '80px' }} />
+                          <span style={{ alignSelf: 'center', fontWeight: 'bold' }}>X</span>
+                          <input type="number" className="form-input" placeholder="Alto" value={furnitureDetails.carpetHeight} onChange={e => setFurnitureDetails({ ...furnitureDetails, carpetHeight: e.target.value })} style={{ width: '80px' }} />
+                          <select className="form-select" style={{ width: '90px' }} value={furnitureDetails.carpetUnit} onChange={e => setFurnitureDetails({ ...furnitureDetails, carpetUnit: e.target.value })}>
+                            <option value="cm">cm</option>
+                            <option value="pulgadas">pulg</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="form-group">
-                      <label className="form-label">Notas adicionales</label>
+                      <label className="form-label">Notas adicionales (Estado de las manchas, olores, etc.)</label>
                       <textarea className="form-textarea" placeholder="Describe detalles adicionales..." value={furnitureDetails.notes} onChange={e => setFurnitureDetails({ ...furnitureDetails, notes: e.target.value })} />
                     </div>
                   </div>
@@ -469,8 +564,8 @@ export default function BookingFlow() {
                 Siguiente <ArrowRight size={18} />
               </button>
             ) : (
-              <button className="btn btn--primary btn--lg" onClick={handleSubmit}>
-                <CheckCircle size={18} /> Confirmar Solicitud
+              <button className="btn btn--primary btn--lg" onClick={handleSubmit} disabled={loading}>
+                <CheckCircle size={18} /> {loading ? 'Procesando...' : 'Confirmar Solicitud'}
               </button>
             )}
           </div>
