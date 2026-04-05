@@ -604,12 +604,31 @@ export async function deleteQuotation(quoteId) {
   return true
 }
 
+export async function getQuotationByAppointmentId(appointmentId) {
+  const { data, error } = await supabase
+    .from('quotations')
+    .select('*, quotation_items(*)')
+    .eq('appointment_id', appointmentId)
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function savePushSubscription(userId, subscription) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ push_subscription: subscription })
+    .eq('id', userId)
+  if (error) throw error
+}
+
 export default {
   login, register, logout, getCurrentUser,
   createAppointment, getAppointment, getClientAppointments, getAllAppointments, updateAppointment,
-  createQuotation, getClientQuotations, getQuotationById, updateQuotation, deleteQuotation,
+  createQuotation, getClientQuotations, getQuotationById, getQuotationByAppointmentId, updateQuotation, deleteQuotation,
   generateQuotationPdf, regenerateQuotationPdf, sendQuotation,
   acceptQuotation, rejectQuotation, requestModification,
   uploadPaymentProof, getAvailableSlots,
-  getServices, createService, getClients, uploadImages
+  getServices, createService, getClients, uploadImages,
+  savePushSubscription
 }

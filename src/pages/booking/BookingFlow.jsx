@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle, ArrowLeft, ArrowRight, Upload, X, ChevronLeft, ChevronRight, Minus, Plus, Image as ImageIcon } from 'lucide-react'
+import { CheckCircle, ArrowLeft, ArrowRight, Upload, X, ChevronLeft, ChevronRight, Minus, Plus, Image as ImageIcon, Video } from 'lucide-react'
 import { getCurrentUser, createAppointment, uploadImages } from '../../services/api'
 import { alertWarning, alertSuccess, toastError } from '../../lib/notifications'
+import { compressVideo, isVideoCompressionSupported } from '../../lib/utils/videoCompressor'
 import './BookingFlow.css'
 
 const SERVICES_LIST = [
@@ -30,7 +31,7 @@ const FLOOR_TYPES = ['Cerámica', 'Porcelanato', 'Madera', 'Mármol', 'Vinilo', 
 const AC_TYPES = ['Split', 'Ventana', 'Central', 'Cassette']
 const FURNITURE_MATERIALS = ['Tela', 'Cuero', 'Microfibra', 'Cuero sintético', 'Otro']
 
-const STEP_LABELS = ['Servicios', 'Fecha y Hora', 'Detalles', 'Imágenes', 'Confirmación']
+const STEP_LABELS = ['Servicios', 'Fecha y Hora', 'Detalles', 'Archivos', 'Confirmación']
 
 function getMonthDays(year, month) {
   const firstDay = new Date(year, month, 1).getDay()
@@ -57,6 +58,7 @@ export default function BookingFlow() {
   const [images, setImages] = useState([])
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
+  const [videoProgress, setVideoProgress] = useState(null) // null = idle, 0-100 = compressing
 
   useEffect(() => {
     getCurrentUser().then(setUser).catch(console.error)
@@ -88,15 +90,53 @@ export default function BookingFlow() {
     return d.getDay() !== 0 && !unavailableDates.includes(day) && d >= new Date(new Date().setHours(0,0,0,0))
   }
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files)
-    const newImages = files.slice(0, 10 - images.length).map(f => ({
-      file: f,
-      preview: URL.createObjectURL(f),
-      name: f.name,
-      size: (f.size / 1024 / 1024).toFixed(2)
-    }))
-    setImages(prev => [...prev, ...newImages])
+    const remaining = 10 - images.length
+    if (remaining <= 0) return
+    const selected = files.slice(0, remaining)
+
+    for (const f of selected) {
+      const isVideo = f.type.startsWith('video/')
+      if (isVideo) {
+        if (!isVideoCompressionSupported()) {
+          // Fallback: upload original without compression
+          setImages(prev => [...prev, {
+            file: f,
+            preview: URL.createObjectURL(f),
+            name: f.name,
+            size: (f.size / 1024 / 1024).toFixed(2),
+            isVideo: true
+          }])
+          continue
+        }
+        try {
+          setVideoProgress(0)
+          const compressed = await compressVideo(f, (p) => setVideoProgress(p))
+          const compressedFile = new File([compressed], f.name.replace(/\.[^.]+$/, '.mp4'), { type: 'video/mp4' })
+          setImages(prev => [...prev, {
+            file: compressedFile,
+            preview: URL.createObjectURL(compressedFile),
+            name: compressedFile.name,
+            size: (compressedFile.size / 1024 / 1024).toFixed(2),
+            isVideo: true
+          }])
+        } catch (err) {
+          console.error('Video compression failed:', err)
+          toastError('No se pudo comprimir el video. Intenta con un archivo más pequeño.')
+        } finally {
+          setVideoProgress(null)
+        }
+      } else {
+        setImages(prev => [...prev, {
+          file: f,
+          preview: URL.createObjectURL(f),
+          name: f.name,
+          size: (f.size / 1024 / 1024).toFixed(2),
+          isVideo: false
+        }])
+      }
+    }
   }
 
   const removeImage = (idx) => {
@@ -468,23 +508,48 @@ export default function BookingFlow() {
           {/* Step 3: Images */}
           {step === 3 && (
             <div className="booking-step animate-fadeIn">
-              <h2>Sube imágenes de referencia</h2>
-              <p className="booking-step__desc">Adjunta fotos de los espacios o artículos (máximo 10 imágenes)</p>
+              <h2>Sube fotos o videos de referencia</h2>
+              <p className="booking-step__desc">Adjunta imágenes o videos de los espacios o artículos (máximo 10 archivos en total). Los videos se comprimen automáticamente.</p>
 
-              <div className="upload-zone" onClick={() => document.getElementById('file-input').click()}>
+              <div
+                className={`upload-zone ${videoProgress !== null ? 'upload-zone--loading' : ''}`}
+                onClick={() => videoProgress === null && document.getElementById('file-input').click()}
+              >
                 <Upload size={40} />
-                <p>Arrastra tus imágenes aquí o <strong>haz clic para seleccionar</strong></p>
-                <span>JPG, PNG, WEBP — Máx. 5MB por imagen</span>
-                <input id="file-input" type="file" multiple accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
+                <p>Arrastra fotos o videos aquí o <strong>haz clic para seleccionar</strong></p>
+                <span>Imágenes: JPG, PNG, WEBP • Videos: MP4, MOV, WEBM — máx. 10 archivos en total</span>
+                <input
+                  id="file-input"
+                  type="file"
+                  multiple
+                  accept="image/*,video/mp4,video/quicktime,video/webm"
+                  onChange={handleImageUpload}
+                  style={{ display: 'none' }}
+                  disabled={videoProgress !== null}
+                />
               </div>
+
+              {videoProgress !== null && (
+                <div className="video-compress-progress">
+                  <Video size={16} />
+                  <span>Comprimiendo video... {videoProgress}%</span>
+                  <div className="video-compress-bar">
+                    <div className="video-compress-bar__fill" style={{ width: `${videoProgress}%` }} />
+                  </div>
+                </div>
+              )}
 
               {images.length > 0 && (
                 <div className="uploaded-images">
-                  <p className="uploaded-count">{images.length} de 10 imágenes cargadas</p>
+                  <p className="uploaded-count">{images.length} de 10 archivos cargados</p>
                   <div className="images-grid">
                     {images.map((img, i) => (
                       <div key={i} className="image-thumb">
-                        <img src={img.preview} alt={img.name} />
+                        {img.isVideo ? (
+                          <video src={img.preview} muted preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <img src={img.preview} alt={img.name} />
+                        )}
                         <button className="image-remove" onClick={() => removeImage(i)}>
                           <X size={14} />
                         </button>
@@ -534,8 +599,8 @@ export default function BookingFlow() {
                 )}
                 {images.length > 0 && (
                   <div className="confirmation-row">
-                    <span className="confirmation-label">Imágenes</span>
-                    <span>{images.length} foto(s) adjuntas</span>
+                    <span className="confirmation-label">Archivos adjuntos</span>
+                    <span>{images.filter(i => !i.isVideo).length} foto(s) y {images.filter(i => i.isVideo).length} video(s)</span>
                   </div>
                 )}
                 {notes && (

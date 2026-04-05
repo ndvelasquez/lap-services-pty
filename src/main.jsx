@@ -5,6 +5,13 @@ import { Toaster } from 'sonner'
 import './index.css'
 import App from './App.jsx'
 
+// Register service worker for web push notifications
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(err => {
+    console.warn('Service worker registration failed:', err)
+  })
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>

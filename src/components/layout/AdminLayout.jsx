@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Calendar, ClipboardList, DollarSign,
-  Wrench, Users, ShoppingCart, Settings, LogOut, Menu, X
+  Wrench, Users, Settings, LogOut, Menu, X
 } from 'lucide-react'
 import './AdminLayout.css'
 
@@ -17,7 +17,11 @@ const navItems = [
 
 export default function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
+
+  // Close mobile sidebar on route change
+  useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
   const isActive = (item) => {
     if (item.exact) return location.pathname === item.path
@@ -26,7 +30,12 @@ export default function AdminLayout() {
 
   return (
     <div className="admin-layout">
-      <aside className={`admin-sidebar ${collapsed ? 'admin-sidebar--collapsed' : ''}`}>
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <div className="admin-sidebar__backdrop" onClick={() => setMobileOpen(false)} />
+      )}
+
+      <aside className={`admin-sidebar ${collapsed ? 'admin-sidebar--collapsed' : ''} ${mobileOpen ? 'admin-sidebar--open' : ''}`}>
         <div className="admin-sidebar__header">
           <Link to="/admin" className="admin-sidebar__logo">
             <span className="admin-sidebar__logo-icon">LAP</span>
@@ -68,6 +77,12 @@ export default function AdminLayout() {
       </aside>
 
       <main className="admin-main">
+        <div className="admin-mobile-header">
+          <button className="admin-mobile-toggle" onClick={() => setMobileOpen(true)} aria-label="Abrir menú">
+            <Menu size={22} />
+          </button>
+          <span className="admin-mobile-brand">LAP Admin</span>
+        </div>
         <Outlet />
       </main>
     </div>

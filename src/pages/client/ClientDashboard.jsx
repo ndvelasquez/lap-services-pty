@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Calendar, FileText, Bell, ChevronRight, Clock, MapPin, PlusCircle } from 'lucide-react'
-import { getCurrentUser, getClientAppointments } from '../../services/api'
+import { Calendar, Bell, ChevronRight, Clock, MapPin, PlusCircle, X } from 'lucide-react'
+import { getCurrentUser, getClientAppointments, savePushSubscription } from '../../services/api'
 import './ClientDashboard.css'
+
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || ''
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = atob(base64)
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)))
+}
 
 const statusLabels = { pending: 'Pendiente', quotation_sent: 'Cotización Enviada', payment_uploaded: 'Pago en Revisión', confirmed: 'Confirmada', completed: 'Completada', cancelled: 'Cancelada', modification_requested: 'Cambio Solicitado' }
 const statusClass = { pending: 'pending', quotation_sent: 'pending', payment_uploaded: 'confirmed', confirmed: 'confirmed', completed: 'completed', cancelled: 'cancelled', modification_requested: 'pending' }
@@ -12,6 +21,8 @@ export default function ClientDashboard() {
   const [user, setUser] = useState(null)
   const [appointments, setAppointments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showPushBanner, setShowPushBanner] = useState(false)
+  const [pushSubscribed, setPushSubscribed] = useState(false)
 
   useEffect(() => {
     async function loadData() {
@@ -45,6 +56,14 @@ export default function ClientDashboard() {
         })
 
         setAppointments(formattedApts)
+
+        // Show push banner if supported and not yet granted
+        if ('Notification' in window && Notification.permission === 'default' && VAPID_PUBLIC_KEY) {
+          setShowPushBanner(true)
+        }
+        if ('Notification' in window && Notification.permission === 'granted') {
+          setPushSubscribed(true)
+        }
       } catch (err) {
         console.error('Error loading dashboard', err)
       } finally {
@@ -53,6 +72,24 @@ export default function ClientDashboard() {
     }
     loadData()
   }, [navigate])
+
+  async function handleEnablePush() {
+    try {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') { setShowPushBanner(false); return }
+      const registration = await navigator.serviceWorker.ready
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      })
+      await savePushSubscription(user.id, subscription.toJSON())
+      setPushSubscribed(true)
+      setShowPushBanner(false)
+    } catch (err) {
+      console.warn('Push subscription failed:', err)
+      setShowPushBanner(false)
+    }
+  }
 
   if (loading) {
     return <div className="client-dash" style={{ paddingTop: '100px', minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><h2>Cargando tu panel...</h2></div>
@@ -70,6 +107,24 @@ export default function ClientDashboard() {
             <Link to="/agendar" className="btn btn--primary"><PlusCircle size={18} style={{marginRight: '8px'}} />Nueva Cita</Link>
           </div>
         </div>
+
+        {/* Push notification banner */}
+        {showPushBanner && !pushSubscribed && (
+          <div className="push-banner">
+            <Bell size={18} className="push-banner__icon" />
+            <span className="push-banner__text">
+              Activa notificaciones para recibir actualizaciones de tus citas en tiempo real.
+            </span>
+            <div className="push-banner__actions">
+              <button className="btn btn--primary btn--sm" onClick={handleEnablePush}>
+                Activar
+              </button>
+              <button className="push-banner__dismiss" onClick={() => setShowPushBanner(false)} aria-label="Cerrar">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        )}
 
         <h2 className="client-dash__section-title">
           <Calendar size={20} /> Mis Citas

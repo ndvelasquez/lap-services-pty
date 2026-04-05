@@ -173,16 +173,24 @@ function AppointmentDetailModal({ apt, onClose }) {
                 Imágenes de Referencia ({allImages.length})
               </h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
-                {allImages.map((url, i) => (
-                  <a key={i} href={url} target="_blank" rel="noreferrer"
-                    style={{ display: 'block', borderRadius: '8px', overflow: 'hidden', aspectRatio: '1', background: 'var(--dark-700)' }}>
-                    <img
-                      src={url} alt={`Imagen ${i + 1}`}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.2s' }}
-                      onError={e => { e.target.style.display = 'none' }}
+                {allImages.map((url, i) => {
+                  const isVideo = /\.(mp4|webm|mov|avi)(\?|$)/i.test(url)
+                  return isVideo ? (
+                    <video
+                      key={i} src={url} controls preload="metadata"
+                      style={{ display: 'block', borderRadius: '8px', overflow: 'hidden', aspectRatio: '1', background: 'var(--dark-700)', width: '100%', objectFit: 'cover' }}
                     />
-                  </a>
-                ))}
+                  ) : (
+                    <a key={i} href={url} target="_blank" rel="noreferrer"
+                      style={{ display: 'block', borderRadius: '8px', overflow: 'hidden', aspectRatio: '1', background: 'var(--dark-700)' }}>
+                      <img
+                        src={url} alt={`Imagen ${i + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.2s' }}
+                        onError={e => { e.target.style.display = 'none' }}
+                      />
+                    </a>
+                  )
+                })}
               </div>
             </section>
           )}
@@ -410,7 +418,7 @@ export default function AdminAppointments() {
         {loading ? (
           <div style={{ padding: '40px', textAlign: 'center' }}>Cargando citas...</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: 'var(--space-4) var(--space-5)', fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--dark-400)', borderBottom: '2px solid var(--light-300)', letterSpacing: '0.05em' }}>Cliente</th>

@@ -203,6 +203,17 @@ ul, ol {
   color: white;
 }
 
+.btn--outline {
+  background: transparent;
+  color: var(--dark-600);
+  border: 2px solid var(--dark-400);
+}
+
+.btn--outline:hover {
+  background: var(--dark-600);
+  color: white;
+}
+
 .btn--ghost {
   background: transparent;
   color: var(--light-100);
@@ -237,6 +248,11 @@ ul, ol {
   background: var(--warning);
   color: white;
 }
+
+/* Filter Chips */
+.filter-chip { padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); background: var(--light-300); color: var(--dark-400); font-size: 0.85rem; font-weight: 500; transition: all var(--transition-fast); border: none; cursor: pointer; }
+.filter-chip:hover { background: var(--light-400); }
+.filter-chip--active { background: var(--primary); color: white; }
 
 /* Badge / Status */
 .badge {

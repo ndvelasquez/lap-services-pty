@@ -190,7 +190,7 @@ export default function AdminQuotations() {
         ) : filtered.length === 0 ? (
           <p style={{ padding: '20px', textAlign: 'center' }}>No se encontraron cotizaciones.</p>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: 'var(--space-4) var(--space-5)', fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--dark-400)', borderBottom: '2px solid var(--light-300)' }}>ID</th>

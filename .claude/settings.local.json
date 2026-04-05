@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /c/Users/Nestor/lap_project log --oneline --all)",
+      "Bash(git -C /c/Users/Nestor/lap_project remote -v)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)"
+    ]
+  }
+}

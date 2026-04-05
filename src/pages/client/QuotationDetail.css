@@ -1,0 +1,224 @@
+.quot-detail-page {
+  padding-top: 100px;
+  padding-bottom: 80px;
+  min-height: 100vh;
+}
+
+.quot-detail-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--dark-400);
+  text-decoration: none;
+  font-size: 0.9rem;
+  margin-bottom: var(--space-5);
+  transition: color var(--transition-fast);
+}
+.quot-detail-back:hover { color: var(--primary); }
+
+/* Header */
+.quot-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+.quot-detail-header__id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  color: var(--dark-400);
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
+.quot-detail-header__title {
+  margin: 0 0 var(--space-1);
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.quot-detail-header__date {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--dark-400);
+}
+.quot-detail-header__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+/* Section title */
+.quot-detail-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--primary);
+  margin: 0 0 var(--space-4);
+}
+
+/* Appointment summary */
+.quot-detail-apt-summary {
+  margin-bottom: var(--space-5);
+}
+.quot-detail-apt-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3) var(--space-5);
+}
+.quot-detail-apt-item--full { grid-column: 1 / -1; }
+.quot-detail-apt-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--dark-400);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+.quot-detail-apt-value {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--dark-700);
+}
+
+/* Table */
+.quot-detail-items-card {
+  margin-bottom: var(--space-5);
+  overflow: hidden;
+}
+.quot-detail-table-wrap { overflow-x: auto; }
+.quot-detail-table {
+  width: 100%;
+  min-width: 580px;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.quot-detail-table th {
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  background: var(--light-200);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dark-400);
+  border-bottom: 1px solid var(--light-300);
+}
+.quot-detail-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--light-200);
+  vertical-align: top;
+}
+.quot-detail-col-num {
+  text-align: right;
+  white-space: nowrap;
+}
+.quot-detail-td-concept { font-weight: 600; color: var(--dark-700); }
+.quot-detail-td-desc { color: var(--dark-500); }
+
+/* Table footer */
+.quot-detail-tfoot-row td {
+  padding: var(--space-2) var(--space-4);
+  border-bottom: none;
+  color: var(--dark-500);
+  font-size: 0.9rem;
+}
+.quot-detail-tfoot-total td {
+  padding: var(--space-3) var(--space-4);
+  border-top: 2px solid var(--light-300);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--dark-700);
+}
+
+/* Conditions */
+.quot-detail-conditions { margin-bottom: var(--space-5); }
+.quot-detail-conditions-text {
+  margin: 0;
+  padding: var(--space-4);
+  background: var(--light-200);
+  border-radius: var(--radius-lg);
+  border-left: 3px solid var(--primary);
+  font-size: 0.9rem;
+  color: var(--dark-500);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+/* Actions */
+.quot-detail-actions {
+  margin-bottom: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.quot-detail-actions-primary {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.quot-detail-btn-accept { min-width: 200px; }
+.quot-detail-modify-hint { margin: 0 0 var(--space-2); font-size: 0.9rem; color: var(--dark-500); }
+.quot-detail-modify-form { display: flex; flex-direction: column; gap: var(--space-3); }
+.quot-detail-modify-actions { display: flex; gap: var(--space-3); justify-content: flex-end; }
+
+/* Accepted state */
+.quot-detail-accepted {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: rgba(46,125,50,0.06);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(46,125,50,0.2);
+  flex-wrap: wrap;
+}
+.quot-detail-accepted svg { color: var(--primary); flex-shrink: 0; }
+.quot-detail-accepted-title { margin: 0 0 4px; font-weight: 700; color: var(--primary); }
+.quot-detail-accepted-hint { margin: 0; font-size: 0.88rem; color: var(--dark-500); }
+
+/* Rejected state */
+.quot-detail-rejected {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: rgba(211,47,47,0.05);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(211,47,47,0.15);
+  flex-wrap: wrap;
+}
+.quot-detail-rejected svg { color: var(--error); flex-shrink: 0; }
+.quot-detail-rejected-title { margin: 0 0 4px; font-weight: 700; color: var(--error); }
+.quot-detail-rejected-hint { margin: 0; font-size: 0.88rem; color: var(--dark-500); }
+
+/* Loading / Error */
+.quot-detail-loading { padding: 80px 0; text-align: center; color: var(--dark-400); }
+.quot-detail-error { padding: var(--space-8); text-align: center; display: flex; flex-direction: column; align-items: center; gap: var(--space-4); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .quot-detail-header { flex-direction: column; }
+  .quot-detail-header__right { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+  .quot-detail-apt-grid { grid-template-columns: 1fr; }
+  .quot-detail-apt-item--full { grid-column: auto; }
+  .quot-detail-actions-primary { flex-direction: column; }
+  .quot-detail-actions-primary .btn { width: 100%; }
+  .quot-detail-btn-accept { min-width: unset; }
+  .quot-detail-accepted { flex-direction: column; align-items: flex-start; }
+  .quot-detail-rejected { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width: 480px) {
+  .quot-detail-page { padding-top: 80px; }
+  .quot-detail-modify-actions { flex-direction: column; }
+  .quot-detail-modify-actions .btn { width: 100%; }
+}
