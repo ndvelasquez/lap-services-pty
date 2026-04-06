@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle, ArrowLeft, ArrowRight, Upload, X, ChevronLeft, ChevronRight, Minus, Plus, Image as ImageIcon, Video } from 'lucide-react'
-import { getCurrentUser, createAppointment, uploadImages } from '../../services/api'
+import { CheckCircle, ArrowLeft, ArrowRight, Upload, X, ChevronLeft, ChevronRight, Minus, Plus, Image as ImageIcon, Video, Clock, AlertCircle, Loader } from 'lucide-react'
+import { getCurrentUser, createAppointment, uploadImages, getAvailableSlots } from '../../services/api'
 import { alertWarning, alertSuccess, toastError } from '../../lib/notifications'
 import { compressVideo, isVideoCompressionSupported } from '../../lib/utils/videoCompressor'
 import './BookingFlow.css'
@@ -31,7 +31,13 @@ const FLOOR_TYPES = ['Cerámica', 'Porcelanato', 'Madera', 'Mármol', 'Vinilo', 
 const AC_TYPES = ['Split', 'Ventana', 'Central', 'Cassette']
 const FURNITURE_MATERIALS = ['Tela', 'Cuero', 'Microfibra', 'Cuero sintético', 'Otro']
 
-const STEP_LABELS = ['Servicios', 'Fecha y Hora', 'Detalles', 'Archivos', 'Confirmación']
+// NEW ORDER: Servicios → Detalles → Archivos → Fecha y Hora → Confirmación
+const STEP_LABELS = ['Servicios', 'Detalles', 'Archivos', 'Fecha y Hora', 'Confirmación']
+
+// Operating hours
+const WORK_START_HOUR = 8  // 8:00 AM
+const WORK_END_HOUR = 18   // 6:00 PM
+const BUFFER_MINUTES = 60  // 1 hour buffer between appointments
 
 function getMonthDays(year, month) {
   const firstDay = new Date(year, month, 1).getDay()
@@ -44,7 +50,203 @@ function getMonthDays(year, month) {
 
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
-const TIME_SLOTS = ['08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM']
+
+/**
+ * Estimates total service duration in minutes based on selected services and their details.
+ * These are industry-standard estimates for professional cleaning services.
+ */
+function estimateServiceDuration(selectedServices, spaceDetails, furnitureDetails, acDetails) {
+  let totalMinutes = 0
+
+  for (const serviceId of selectedServices) {
+    const service = SERVICES_LIST.find(s => s.id === serviceId)
+    if (!service) continue
+
+    switch (serviceId) {
+      // Limpieza de Espacios
+      case '00000000-0000-0000-0000-000000000001': { // Apartamento
+        const sqm = parseFloat(spaceDetails.sqm) || 50
+        totalMinutes += Math.max(120, Math.ceil(sqm * 2)) // ~2 min/m², mínimo 2h
+        break
+      }
+      case '00000000-0000-0000-0000-000000000002': { // Casa
+        const sqm = parseFloat(spaceDetails.sqm) || 80
+        totalMinutes += Math.max(150, Math.ceil(sqm * 2)) // ~2 min/m², mínimo 2.5h
+        break
+      }
+      case '00000000-0000-0000-0000-000000000003': { // Oficina
+        const sqm = parseFloat(spaceDetails.sqm) || 60
+        totalMinutes += Math.max(120, Math.ceil(sqm * 1.5)) // ~1.5 min/m², mínimo 2h
+        break
+      }
+      case '00000000-0000-0000-0000-000000000004': { // Post-Remodelación
+        const sqm = parseFloat(spaceDetails.sqm) || 60
+        totalMinutes += Math.max(180, Math.ceil(sqm * 3)) // ~3 min/m², mínimo 3h
+        break
+      }
+      // Muebles
+      case '00000000-0000-0000-0000-000000000005': // Sofás
+        totalMinutes += (furnitureDetails.seats || 2) * 30 // ~30 min/asiento
+        break
+      case '00000000-0000-0000-0000-000000000006': { // Colchones
+        const sizeMap = { 'Twin': 45, 'Full': 60, 'Queen': 75, 'King': 90 }
+        totalMinutes += sizeMap[furnitureDetails.mattressSize] || 75
+        break
+      }
+      case '00000000-0000-0000-0000-000000000007': { // Alfombras
+        const w = parseFloat(furnitureDetails.carpetWidth) || 200
+        const h = parseFloat(furnitureDetails.carpetHeight) || 300
+        const unit = furnitureDetails.carpetUnit
+        // Convert to m² if in cm or inches
+        let areaSqm
+        if (unit === 'pulgadas') {
+          areaSqm = (w * 0.0254) * (h * 0.0254)
+        } else {
+          areaSqm = (w / 100) * (h / 100) // cm to m
+        }
+        totalMinutes += Math.max(30, Math.ceil(areaSqm * 5)) // ~5 min/m²
+        break
+      }
+      case '00000000-0000-0000-0000-000000000008': // Sillas de Oficina
+        totalMinutes += (furnitureDetails.pieces || 1) * 15 // ~15 min/pieza
+        break
+      case '00000000-0000-0000-0000-000000000009': // Persianas Rollers
+        totalMinutes += (furnitureDetails.pieces || 1) * 20 // ~20 min/pieza
+        break
+      // Aire Acondicionado
+      case '00000000-0000-0000-0000-000000000010': // Split
+        totalMinutes += (acDetails.qty || 1) * 60 // ~60 min/unidad
+        break
+      case '00000000-0000-0000-0000-000000000011': // Central
+        totalMinutes += (acDetails.qty || 1) * 120 // ~120 min/unidad
+        break
+      case '00000000-0000-0000-0000-000000000012': // Instalación
+        totalMinutes += (acDetails.qty || 1) * 180 // ~180 min/unidad
+        break
+      // Auto Detailing
+      case '00000000-0000-0000-0000-000000000013': // Interior
+        totalMinutes += 150
+        break
+      case '00000000-0000-0000-0000-000000000014': // Lavado Completo
+        totalMinutes += 120
+        break
+      // Reparaciones
+      case '00000000-0000-0000-0000-000000000015': // Plomería
+        totalMinutes += 120
+        break
+      case '00000000-0000-0000-0000-000000000016': // Electricidad
+        totalMinutes += 90
+        break
+      case '00000000-0000-0000-0000-000000000017': // Pintura
+        totalMinutes += 180
+        break
+      default:
+        totalMinutes += 60 // Fallback 1h
+    }
+  }
+
+  // Minimum 60 minutes for any service combo
+  return Math.max(60, totalMinutes)
+}
+
+/**
+ * Formats minutes into a human-readable string like "2h 30min"
+ */
+function formatDuration(minutes) {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h === 0) return `${m} min`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}min`
+}
+
+/**
+ * Converts a time string like "08:00" or "14:30" to total minutes since midnight.
+ */
+function timeToMinutes(timeStr) {
+  const [h, m] = timeStr.split(':').map(Number)
+  return h * 60 + m
+}
+
+/**
+ * Converts total minutes since midnight to "HH:MM" string.
+ */
+function minutesToTime(mins) {
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+/**
+ * Formats "HH:MM" (24h) to "hh:MM AM/PM" for display.
+ */
+function formatTimeDisplay(time24) {
+  const [h, m] = time24.split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
+  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`
+}
+
+/**
+ * Generates available time slots for a given date, considering existing appointments and buffer.
+ * 
+ * @param {Array} existingAppointments - Array of {start_time, end_time} from Supabase
+ * @param {number} serviceDurationMinutes - Estimated duration of the new service
+ * @returns {Array} Array of {time24, display, available, reason}
+ */
+function generateAvailableSlots(existingAppointments, serviceDurationMinutes) {
+  const slots = []
+  const startMinutes = WORK_START_HOUR * 60     // 480 (8:00)
+  const endMinutes = WORK_END_HOUR * 60         // 1080 (18:00)
+
+  // Parse existing appointments into minute ranges
+  const occupied = existingAppointments.map(apt => ({
+    start: timeToMinutes(apt.start_time),
+    end: timeToMinutes(apt.end_time)
+  })).sort((a, b) => a.start - b.start)
+
+  // Generate slots every 30 minutes
+  for (let slotStart = startMinutes; slotStart < endMinutes; slotStart += 30) {
+    const slotEnd = slotStart + serviceDurationMinutes
+    const time24 = minutesToTime(slotStart)
+    const display = formatTimeDisplay(time24)
+
+    // Check 1: Does the service fit before end of business?
+    if (slotEnd > endMinutes) {
+      slots.push({ time24, display, available: false, reason: 'El servicio excede el horario laboral' })
+      continue
+    }
+
+    // Check 2: Overlap with any existing appointment (including buffer)
+    let conflict = false
+    let conflictReason = ''
+    for (const apt of occupied) {
+      const aptStartWithBuffer = apt.start - BUFFER_MINUTES  // Buffer before existing apt
+      const aptEndWithBuffer = apt.end + BUFFER_MINUTES      // Buffer after existing apt
+
+      // The new service window [slotStart, slotEnd] must not overlap [apt.start - buffer, apt.end + buffer]
+      // More precisely:
+      // - New service ends must be at or before (existing start - buffer)
+      // - OR new service starts must be at or after (existing end + buffer)
+      if (!(slotEnd <= aptStartWithBuffer || slotStart >= aptEndWithBuffer)) {
+        conflict = true
+        const aptDisplayStart = formatTimeDisplay(minutesToTime(apt.start))
+        const aptDisplayEnd = formatTimeDisplay(minutesToTime(apt.end))
+        conflictReason = `Conflicto con cita de ${aptDisplayStart} a ${aptDisplayEnd} (+ 1h de margen)`
+        break
+      }
+    }
+
+    if (conflict) {
+      slots.push({ time24, display, available: false, reason: conflictReason })
+    } else {
+      slots.push({ time24, display, available: true, reason: '' })
+    }
+  }
+
+  return slots
+}
+
 
 export default function BookingFlow() {
   const navigate = useNavigate()
@@ -54,11 +256,16 @@ export default function BookingFlow() {
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
   const [selectedDate, setSelectedDate] = useState(null)
-  const [selectedTime, setSelectedTime] = useState(null)
+  const [selectedTime, setSelectedTime] = useState(null) // now stores 24h format "HH:MM"
   const [images, setImages] = useState([])
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
-  const [videoProgress, setVideoProgress] = useState(null) // null = idle, 0-100 = compressing
+  const [videoProgress, setVideoProgress] = useState(null)
+  
+  // New: availability state
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [availableSlots, setAvailableSlots] = useState([])
+  const [slotsError, setSlotsError] = useState(null)
 
   useEffect(() => {
     getCurrentUser().then(setUser).catch(console.error)
@@ -81,13 +288,63 @@ export default function BookingFlow() {
     }))
   }
 
-  const unavailableDates = [5, 8, 12, 15, 22, 26]
-  const unavailableSlots = ['12:00 PM', '05:00 PM']
+  // Computed values
+  const getCategoryFromId = (id) => SERVICES_LIST.find(s => s.id === id)?.cat
+  const hasSpaceService = selectedServices.some(id => getCategoryFromId(id) === 'Limpieza de Espacios')
+  const hasFurnitureService = selectedServices.some(id => getCategoryFromId(id) === 'Muebles')
+  const hasACService = selectedServices.some(id => getCategoryFromId(id) === 'Aire Acondicionado')
+  const hasRepairService = selectedServices.some(id => getCategoryFromId(id) === 'Reparaciones')
+  const hasSofa = selectedServices.some(id => id === '00000000-0000-0000-0000-000000000005')
+  const hasMattress = selectedServices.some(id => id === '00000000-0000-0000-0000-000000000006')
+  const hasCarpet = selectedServices.some(id => id === '00000000-0000-0000-0000-000000000007')
+
+  // Estimated duration in minutes
+  const estimatedDuration = estimateServiceDuration(selectedServices, spaceDetails, furnitureDetails, acDetails)
+
+  // Reset date/time when going back from Date step, since duration might have changed
+  const handleStepChange = (newStep) => {
+    // When navigating to the date/time step (3), reset time selection
+    // since the available slots depend on the (possibly changed) duration
+    if (newStep === 3) {
+      setSelectedTime(null)
+      setAvailableSlots([])
+      if (selectedDate) {
+        fetchSlotsForDate(selectedDate)
+      }
+    }
+    setStep(newStep)
+  }
+
+  // Fetch slots when a date is selected
+  const fetchSlotsForDate = useCallback(async (day) => {
+    setLoadingSlots(true)
+    setSlotsError(null)
+    setSelectedTime(null)
+
+    const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    try {
+      const existingApts = await getAvailableSlots(dateStr)
+      const slots = generateAvailableSlots(existingApts || [], estimatedDuration)
+      setAvailableSlots(slots)
+    } catch (err) {
+      console.error('Error fetching slots:', err)
+      setSlotsError('No se pudieron cargar los horarios. Intenta de nuevo.')
+      setAvailableSlots([])
+    } finally {
+      setLoadingSlots(false)
+    }
+  }, [calYear, calMonth, estimatedDuration])
+
+  const handleDateSelect = (day) => {
+    setSelectedDate(day)
+    fetchSlotsForDate(day)
+  }
 
   const isDateAvailable = (day) => {
     if (!day) return false
     const d = new Date(calYear, calMonth, day)
-    return d.getDay() !== 0 && !unavailableDates.includes(day) && d >= new Date(new Date().setHours(0,0,0,0))
+    // No Sundays and must be today or future
+    return d.getDay() !== 0 && d >= new Date(new Date().setHours(0, 0, 0, 0))
   }
 
   const handleImageUpload = async (e) => {
@@ -100,7 +357,6 @@ export default function BookingFlow() {
       const isVideo = f.type.startsWith('video/')
       if (isVideo) {
         if (!isVideoCompressionSupported()) {
-          // Fallback: upload original without compression
           setImages(prev => [...prev, {
             file: f,
             preview: URL.createObjectURL(f),
@@ -154,15 +410,11 @@ export default function BookingFlow() {
 
     setLoading(true)
     try {
-      // Formatear la fecha a YYYY-MM-DD
+      // Format date as YYYY-MM-DD
       const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(selectedDate).padStart(2, '0')}`
-      
-      // Formatear la hora a HH:MM:SS
-      let [timeStr, modifier] = selectedTime.split(' ')
-      let [hours, minutes] = timeStr.split(':')
-      if (hours === '12') hours = '00'
-      if (modifier === 'PM') hours = parseInt(hours, 10) + 12
-      const formattedTime = `${String(hours).padStart(2, '0')}:${minutes}:00`
+
+      // selectedTime is already in "HH:MM" 24h format
+      const formattedTime = `${selectedTime}:00`
 
       const customDetails = {
         space: hasSpaceService ? spaceDetails : null,
@@ -185,7 +437,8 @@ export default function BookingFlow() {
         notes,
         services: selectedServices,
         customDetails,
-        images: uploadedUrls
+        images: uploadedUrls,
+        estimatedDurationMinutes: estimatedDuration
       }
 
       await createAppointment(appData)
@@ -205,21 +458,20 @@ export default function BookingFlow() {
     return acc
   }, {})
 
-  const getCategoryFromId = (id) => SERVICES_LIST.find(s => s.id === id)?.cat
-
-  const hasSpaceService = selectedServices.some(id => getCategoryFromId(id) === 'Limpieza de Espacios')
-  const hasFurnitureService = selectedServices.some(id => getCategoryFromId(id) === 'Muebles')
-  const hasACService = selectedServices.some(id => getCategoryFromId(id) === 'Aire Acondicionado')
-  const hasRepairService = selectedServices.some(id => getCategoryFromId(id) === 'Reparaciones')
-
-  const hasSofa = selectedServices.some(id => id === '00000000-0000-0000-0000-000000000005')
-  const hasMattress = selectedServices.some(id => id === '00000000-0000-0000-0000-000000000006')
-  const hasCarpet = selectedServices.some(id => id === '00000000-0000-0000-0000-000000000007')
-
   const canNext = () => {
     if (step === 0) return selectedServices.length > 0
-    if (step === 1) return selectedDate && selectedTime
+    if (step === 1) return true // Details are optional
+    if (step === 2) return true // Files are optional
+    if (step === 3) return selectedDate && selectedTime
     return true
+  }
+
+  // Compute end time display for confirmation
+  const getEndTimeDisplay = () => {
+    if (!selectedTime) return ''
+    const startMins = timeToMinutes(selectedTime)
+    const endMins = startMins + estimatedDuration
+    return formatTimeDisplay(minutesToTime(endMins))
   }
 
   return (
@@ -246,7 +498,7 @@ export default function BookingFlow() {
             ))}
           </div>
 
-          {/* Step 0: Services */}
+          {/* Step 0: Services (unchanged) */}
           {step === 0 && (
             <div className="booking-step animate-fadeIn">
               <h2>Selecciona tus servicios</h2>
@@ -273,67 +525,20 @@ export default function BookingFlow() {
             </div>
           )}
 
-          {/* Step 1: Calendar */}
+          {/* Step 1: Details (was step 2) */}
           {step === 1 && (
-            <div className="booking-step animate-fadeIn">
-              <h2>Selecciona fecha y hora</h2>
-              <div className="calendar-layout">
-                <div className="calendar-panel">
-                  <div className="calendar-header">
-                    <button onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1) } else setCalMonth(m => m - 1) }}>
-                      <ChevronLeft size={20} />
-                    </button>
-                    <span>{MONTHS[calMonth]} {calYear}</span>
-                    <button onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1) } else setCalMonth(m => m + 1) }}>
-                      <ChevronRight size={20} />
-                    </button>
-                  </div>
-                  <div className="calendar-days">
-                    {DAYS.map(d => <div key={d} className="calendar-day-name">{d}</div>)}
-                    {getMonthDays(calYear, calMonth).map((day, i) => (
-                      <button
-                        key={i}
-                        className={`calendar-day ${!day ? 'calendar-day--empty' : ''} ${day && !isDateAvailable(day) ? 'calendar-day--unavailable' : ''} ${selectedDate === day && selectedDate ? 'calendar-day--selected' : ''}`}
-                        onClick={() => day && isDateAvailable(day) && setSelectedDate(day)}
-                        disabled={!day || !isDateAvailable(day)}
-                      >
-                        {day}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="time-panel">
-                  <h3>Horarios Disponibles</h3>
-                  {selectedDate ? (
-                    <>
-                      <p className="time-panel__date">{DAYS[new Date(calYear, calMonth, selectedDate).getDay()]} {selectedDate} de {MONTHS[calMonth]}</p>
-                      <div className="time-grid">
-                        {TIME_SLOTS.map(t => (
-                          <button
-                            key={t}
-                            className={`time-slot ${unavailableSlots.includes(t) ? 'time-slot--unavailable' : ''} ${selectedTime === t ? 'time-slot--selected' : ''}`}
-                            onClick={() => !unavailableSlots.includes(t) && setSelectedTime(t)}
-                            disabled={unavailableSlots.includes(t)}
-                          >
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <p className="time-panel__empty">Selecciona una fecha para ver los horarios</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Details */}
-          {step === 2 && (
             <div className="booking-step animate-fadeIn">
               <h2>Detalles del servicio</h2>
               <p className="booking-step__desc">Completa la información para una cotización precisa</p>
+
+              {/* Duration Estimate Badge */}
+              <div className="duration-badge">
+                <Clock size={18} />
+                <div className="duration-badge__info">
+                  <span className="duration-badge__label">Duración estimada del servicio</span>
+                  <span className="duration-badge__value">{formatDuration(estimatedDuration)}</span>
+                </div>
+              </div>
 
               {hasSpaceService && (
                 <div className="detail-section card">
@@ -505,8 +710,8 @@ export default function BookingFlow() {
             </div>
           )}
 
-          {/* Step 3: Images */}
-          {step === 3 && (
+          {/* Step 2: Images (was step 3) */}
+          {step === 2 && (
             <div className="booking-step animate-fadeIn">
               <h2>Sube fotos o videos de referencia</h2>
               <p className="booking-step__desc">Adjunta imágenes o videos de los espacios o artículos (máximo 10 archivos en total). Los videos se comprimen automáticamente.</p>
@@ -562,6 +767,113 @@ export default function BookingFlow() {
             </div>
           )}
 
+          {/* Step 3: Calendar + Time (was step 1) — NOW with real availability */}
+          {step === 3 && (
+            <div className="booking-step animate-fadeIn">
+              <h2>Selecciona fecha y hora</h2>
+
+              {/* Duration reminder */}
+              <div className="duration-badge duration-badge--compact">
+                <Clock size={16} />
+                <span>Duración estimada: <strong>{formatDuration(estimatedDuration)}</strong></span>
+              </div>
+
+              <div className="calendar-layout">
+                <div className="calendar-panel">
+                  <div className="calendar-header">
+                    <button onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1) } else setCalMonth(m => m - 1) }}>
+                      <ChevronLeft size={20} />
+                    </button>
+                    <span>{MONTHS[calMonth]} {calYear}</span>
+                    <button onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1) } else setCalMonth(m => m + 1) }}>
+                      <ChevronRight size={20} />
+                    </button>
+                  </div>
+                  <div className="calendar-days">
+                    {DAYS.map(d => <div key={d} className="calendar-day-name">{d}</div>)}
+                    {getMonthDays(calYear, calMonth).map((day, i) => (
+                      <button
+                        key={i}
+                        className={`calendar-day ${!day ? 'calendar-day--empty' : ''} ${day && !isDateAvailable(day) ? 'calendar-day--unavailable' : ''} ${selectedDate === day && selectedDate ? 'calendar-day--selected' : ''}`}
+                        onClick={() => day && isDateAvailable(day) && handleDateSelect(day)}
+                        disabled={!day || !isDateAvailable(day)}
+                      >
+                        {day}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="time-panel">
+                  <h3>Horarios Disponibles</h3>
+                  {selectedDate ? (
+                    <>
+                      <p className="time-panel__date">{DAYS[new Date(calYear, calMonth, selectedDate).getDay()]} {selectedDate} de {MONTHS[calMonth]}</p>
+                      
+                      {loadingSlots ? (
+                        <div className="slots-loading">
+                          <Loader size={24} className="slots-loading__spinner" />
+                          <span>Consultando disponibilidad...</span>
+                        </div>
+                      ) : slotsError ? (
+                        <div className="slots-error">
+                          <AlertCircle size={18} />
+                          <span>{slotsError}</span>
+                          <button className="btn btn--secondary btn--sm" onClick={() => fetchSlotsForDate(selectedDate)}>Reintentar</button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="time-grid">
+                            {availableSlots.map(slot => (
+                              <button
+                                key={slot.time24}
+                                className={`time-slot ${!slot.available ? 'time-slot--unavailable' : ''} ${selectedTime === slot.time24 ? 'time-slot--selected' : ''}`}
+                                onClick={() => slot.available && setSelectedTime(slot.time24)}
+                                disabled={!slot.available}
+                                title={!slot.available ? slot.reason : `${slot.display} → ${formatTimeDisplay(minutesToTime(timeToMinutes(slot.time24) + estimatedDuration))}`}
+                              >
+                                {slot.display}
+                              </button>
+                            ))}
+                          </div>
+
+                          {availableSlots.length > 0 && availableSlots.every(s => !s.available) && (
+                            <div className="no-slots-message">
+                              <AlertCircle size={18} />
+                              <p>No hay horarios disponibles para esta fecha con la duración de tu servicio ({formatDuration(estimatedDuration)}). Prueba otro día.</p>
+                            </div>
+                          )}
+
+                          {selectedTime && (
+                            <div className="selected-time-summary">
+                              <Clock size={16} />
+                              <span>
+                                Tu servicio sería de <strong>{formatTimeDisplay(selectedTime)}</strong> a <strong>{getEndTimeDisplay()}</strong>
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="slots-legend">
+                            <div className="slots-legend__item">
+                              <span className="slots-legend__dot slots-legend__dot--available"></span>
+                              <span>Disponible</span>
+                            </div>
+                            <div className="slots-legend__item">
+                              <span className="slots-legend__dot slots-legend__dot--unavailable"></span>
+                              <span>No disponible</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <p className="time-panel__empty">Selecciona una fecha para ver los horarios</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Step 4: Confirmation */}
           {step === 4 && (
             <div className="booking-step animate-fadeIn">
@@ -572,12 +884,16 @@ export default function BookingFlow() {
                   <span>{selectedServices.map(id => SERVICES_LIST.find(s => s.id === id)?.name).join(', ')}</span>
                 </div>
                 <div className="confirmation-row">
+                  <span className="confirmation-label">Duración estimada</span>
+                  <span>{formatDuration(estimatedDuration)}</span>
+                </div>
+                <div className="confirmation-row">
                   <span className="confirmation-label">Fecha</span>
                   <span>{selectedDate && `${DAYS[new Date(calYear, calMonth, selectedDate).getDay()]} ${selectedDate} de ${MONTHS[calMonth]}, ${calYear}`}</span>
                 </div>
                 <div className="confirmation-row">
                   <span className="confirmation-label">Hora</span>
-                  <span>{selectedTime}</span>
+                  <span>{selectedTime && `${formatTimeDisplay(selectedTime)} → ${getEndTimeDisplay()}`}</span>
                 </div>
                 {hasSpaceService && (
                   <div className="confirmation-row">
@@ -619,13 +935,13 @@ export default function BookingFlow() {
           {/* Navigation */}
           <div className="booking-nav">
             {step > 0 && (
-              <button className="btn btn--secondary" onClick={() => setStep(s => s - 1)}>
+              <button className="btn btn--secondary" onClick={() => handleStepChange(step - 1)}>
                 <ArrowLeft size={18} /> Anterior
               </button>
             )}
             <div style={{ flex: 1 }} />
             {step < 4 ? (
-              <button className="btn btn--primary btn--lg" onClick={() => setStep(s => s + 1)} disabled={!canNext()}>
+              <button className="btn btn--primary btn--lg" onClick={() => handleStepChange(step + 1)} disabled={!canNext()}>
                 Siguiente <ArrowRight size={18} />
               </button>
             ) : (
