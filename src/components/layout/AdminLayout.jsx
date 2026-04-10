@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Calendar, ClipboardList, DollarSign,
-  Wrench, Users, Settings, LogOut, Menu, X
+  Wrench, Users, Settings, LogOut, Menu, X, Wallet
 } from 'lucide-react'
 import './AdminLayout.css'
 
@@ -11,6 +11,7 @@ const navItems = [
   { path: '/admin/calendario', icon: Calendar, label: 'Calendario' },
   { path: '/admin/citas', icon: ClipboardList, label: 'Citas' },
   { path: '/admin/cotizaciones', icon: DollarSign, label: 'Cotizaciones' },
+  { path: '/admin/abonos', icon: Wallet, label: 'Abonos' },
   { path: '/admin/servicios', icon: Wrench, label: 'Servicios' },
   { path: '/admin/clientes', icon: Users, label: 'Clientes' },
 ]

@@ -14,6 +14,7 @@ import AdminCalendar from './pages/admin/AdminCalendar'
 import AdminAppointments from './pages/admin/AdminAppointments'
 import AdminQuotations from './pages/admin/AdminQuotations'
 import AdminQuotationBuilder from './pages/admin/QuotationBuilder'
+import AdminAbonos from './pages/admin/AdminAbonos'
 import AdminServices from './pages/admin/AdminServices'
 import AdminClients from './pages/admin/AdminClients'
 import AdminSettings from './pages/admin/AdminSettings'
@@ -47,6 +48,7 @@ function App() {
         <Route path="cotizaciones" element={<AdminQuotations />} />
         <Route path="cotizaciones/nueva" element={<AdminQuotationBuilder />} />
         <Route path="cotizaciones/editar" element={<AdminQuotationBuilder />} />
+        <Route path="abonos" element={<AdminAbonos />} />
         <Route path="servicios" element={<AdminServices />} />
         <Route path="clientes" element={<AdminClients />} />
         <Route path="configuracion" element={<AdminSettings />} />

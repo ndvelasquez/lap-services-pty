@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Search, Filter, Check, X as XIcon, Eye, User, Calendar, Clock, MapPin, FileText, Layers, Image as ImageIcon, Phone, Mail } from 'lucide-react'
-import { getAllAppointments, updateAppointment } from '../../services/api'
+import { getAllAppointments, updateAppointment, verifyDeposit, recordFinalPayment, supabase } from '../../services/api'
 import { alertConfirm, toastSuccess, toastError } from '../../lib/notifications'
 
 const statusLabels = {
@@ -370,12 +370,40 @@ export default function AdminAppointments() {
   }, [])
 
   const handleUpdateStatus = async (id, newStatus) => {
-    const confirmed = await alertConfirm('Cambiar Estado', `¿Seguro que deseas marcar la cita como ${newStatus}?`)
+    const labelMap = { confirmed: 'Confirmada', completed: 'Completada', cancelled: 'Cancelada' }
+    const confirmed = await alertConfirm('Cambiar Estado', `¿Seguro que deseas marcar la cita como ${labelMap[newStatus] || newStatus}?`)
     if (!confirmed) return
     try {
       await updateAppointment(id, { status: newStatus })
+
+      // Si se confirma la cita → verificar automáticamente el abono pendiente
+      if (newStatus === 'confirmed') {
+        const { data: deposit } = await supabase
+          .from('payments')
+          .select('id')
+          .eq('appointment_id', id)
+          .eq('payment_type', 'deposit')
+          .eq('status', 'pending')
+          .single()
+        if (deposit) {
+          await verifyDeposit(deposit.id)
+          toastSuccess('Cita confirmada y abono verificado.')
+        } else {
+          toastSuccess('Cita marcada como Confirmada.')
+        }
+      }
+
+      // Si se completa el servicio → registrar el 50% final como asumido
+      if (newStatus === 'completed') {
+        await recordFinalPayment(id)
+        toastSuccess('Servicio completado. Pago final registrado como ingreso.')
+      }
+
+      if (newStatus === 'cancelled') {
+        toastSuccess('Cita cancelada.')
+      }
+
       setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: newStatus } : a))
-      toastSuccess(`Cita marcada como ${newStatus}`)
     } catch (error) {
       console.error('Error updating status', error)
       toastError('Hubo un error al actualizar el estado')
@@ -449,8 +477,11 @@ export default function AdminAppointments() {
                       {a.status === 'quotation_sent' && (
                         <Link to="/admin/cotizaciones" className="btn btn--secondary btn--sm" title="Ver Cotización">Ver Coti</Link>
                       )}
-                      {a.status !== 'completed' && a.status !== 'cancelled' && (
-                        <button className="btn btn--primary btn--sm" title="Confirmar" onClick={() => handleUpdateStatus(a.id, 'confirmed')}><Check size={14} /></button>
+                      {(a.status === 'payment_uploaded' || a.status === 'quotation_sent' || a.status === 'modification_requested') && (
+                        <button className="btn btn--primary btn--sm" title="Confirmar cita y verificar abono" onClick={() => handleUpdateStatus(a.id, 'confirmed')}><Check size={14} /> Confirmar</button>
+                      )}
+                      {a.status === 'confirmed' && (
+                        <button className="btn btn--primary btn--sm" style={{ background: '#2E7D32' }} title="Marcar como completado" onClick={() => handleUpdateStatus(a.id, 'completed')}>Completar</button>
                       )}
                       {a.status !== 'completed' && a.status !== 'cancelled' && (
                         <button className="btn btn--danger btn--sm" title="Cancelar" onClick={() => handleUpdateStatus(a.id, 'cancelled')}><XIcon size={14} /></button>

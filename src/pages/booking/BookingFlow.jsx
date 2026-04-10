@@ -751,9 +751,9 @@ export default function BookingFlow() {
                     {images.map((img, i) => (
                       <div key={i} className="image-thumb">
                         {img.isVideo ? (
-                          <video src={img.preview} muted preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <video src={img.preview} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
-                          <img src={img.preview} alt={img.name} />
+                          <img src={img.preview} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         )}
                         <button className="image-remove" onClick={() => removeImage(i)}>
                           <X size={14} />
@@ -853,13 +853,33 @@ export default function BookingFlow() {
                             </div>
                           )}
 
-                          <div className="slots-legend">
-                            <div className="slots-legend__item">
-                              <span className="slots-legend__dot slots-legend__dot--available"></span>
+                          <div className="slots-legend" style={{ 
+                            display: 'flex', 
+                            gap: '16px', 
+                            marginTop: '24px', 
+                            justifyContent: 'center', 
+                            fontSize: '0.8rem', 
+                            color: 'var(--light-500)',
+                            fontWeight: 500
+                          }}>
+                            <div className="slots-legend__item" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div style={{ 
+                                width: '20px', 
+                                height: '14px', 
+                                borderRadius: '4px', 
+                                border: '2px solid var(--light-300)', 
+                                background: 'white' 
+                              }}></div>
                               <span>Disponible</span>
                             </div>
-                            <div className="slots-legend__item">
-                              <span className="slots-legend__dot slots-legend__dot--unavailable"></span>
+                            <div className="slots-legend__item" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div style={{ 
+                                width: '20px', 
+                                height: '14px', 
+                                borderRadius: '4px', 
+                                border: '2px solid transparent', 
+                                background: 'var(--light-200)',
+                              }}></div>
                               <span>No disponible</span>
                             </div>
                           </div>

@@ -154,6 +154,50 @@
   white-space: pre-wrap;
 }
 
+/* Payment policy breakdown */
+.quot-detail-payment-info { margin-bottom: var(--space-5); }
+.quot-detail-payment-breakdown { display: flex; flex-direction: column; gap: 0; }
+.quot-detail-payment-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+}
+.quot-detail-payment-row--highlight {
+  background: rgba(46,125,50,0.07);
+  border: 1px solid rgba(46,125,50,0.18);
+  margin-bottom: var(--space-2);
+}
+.quot-detail-payment-label {
+  margin: 0 0 2px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--dark-700);
+}
+.quot-detail-payment-desc {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--dark-400);
+}
+.quot-detail-payment-amount {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--primary);
+  white-space: nowrap;
+}
+.quot-detail-payment-amount--muted { color: var(--dark-400); }
+.quot-detail-payment-total {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--light-300);
+  margin-top: var(--space-2);
+  font-size: 0.85rem;
+  color: var(--dark-400);
+}
+
 /* Actions */
 .quot-detail-actions {
   margin-bottom: var(--space-5);

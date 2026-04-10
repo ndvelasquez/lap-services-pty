@@ -107,7 +107,8 @@ function buildGcalUrl(apt, serviceNames) {
 }
 
 function isVideoUrl(url) {
-  return /\.(mp4|webm|mov|avi)(\?|$)/i.test(url)
+  if (!url || typeof url !== 'string') return false;
+  return /\.(mp4|webm|mov|avi|m4v|mkv|hevc)(\?|$)/i.test(url.trim()) || url.toLowerCase().includes('video');
 }
 
 export default function AppointmentDetail() {
@@ -211,7 +212,23 @@ export default function AppointmentDetail() {
 
   const services = apt.appointment_services || []
   const serviceNames = services.map(s => s.services?.name).filter(Boolean).join(', ') || 'Servicio de Limpieza'
-  const allMedia = [...new Set(services.flatMap(s => s.images || []).filter(Boolean))]
+  
+  let rawMedia = []
+  services.forEach(s => {
+    let imgs = s.images
+    if (typeof imgs === 'string') {
+      try { imgs = JSON.parse(imgs) } catch(e) { imgs = [imgs] }
+    }
+    if (Array.isArray(imgs)) {
+      imgs.forEach(url => {
+        if (typeof url === 'string') {
+          // Break by comma in case it was stored incorrectly as "url1,url2"
+          url.split(',').forEach(u => rawMedia.push(u.trim()))
+        }
+      })
+    }
+  })
+  const allMedia = [...new Set(rawMedia.filter(Boolean))]
 
   let dateStr = apt.appointment_date
   if (apt.appointment_date) {
@@ -338,19 +355,28 @@ export default function AppointmentDetail() {
                 <div className="apt-detail-media-grid">
                   {allMedia.map((url, i) => (
                     isVideoUrl(url) ? (
-                      <video
-                        key={i}
-                        src={url}
-                        controls
-                        className="apt-detail-media-item"
-                        preload="metadata"
-                      />
+                      <a key={i} href={url} target="_blank" rel="noreferrer" className="apt-detail-media-item">
+                        <video
+                          src={url}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          preload="metadata"
+                          style={{ pointerEvents: 'none', width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </a>
                     ) : (
                       <a key={i} href={url} target="_blank" rel="noreferrer" className="apt-detail-media-item">
                         <img
                           src={url}
                           alt={`Referencia ${i + 1}`}
-                          onError={e => { e.target.style.display = 'none' }}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={e => {
+                            // Si falla, mostramos un fallback o evitamos que se oculte por completo
+                            e.target.style.opacity = 0.5
+                            e.target.alt = "Imagen no soportada o cargando..."
+                          }}
                         />
                       </a>
                     )
@@ -389,10 +415,25 @@ export default function AppointmentDetail() {
                 <h2 className="apt-detail-section__title">
                   <Upload size={16} /> Subir Comprobante de Pago
                 </h2>
+                {/* 50% deposit breakdown */}
+                <div className="apt-detail-deposit-info">
+                  <div className="apt-detail-deposit-row">
+                    <span>Abono requerido ahora (50%)</span>
+                    <strong className="apt-detail-deposit-amount">${(Number(quotation?.total || 0) * 0.5).toFixed(2)}</strong>
+                  </div>
+                  <div className="apt-detail-deposit-row apt-detail-deposit-row--muted">
+                    <span>Saldo al finalizar el servicio (50%)</span>
+                    <span>${(Number(quotation?.total || 0) * 0.5).toFixed(2)}</span>
+                  </div>
+                  <div className="apt-detail-deposit-row apt-detail-deposit-row--total">
+                    <span>Total cotizado</span>
+                    <span>${Number(quotation?.total || 0).toFixed(2)}</span>
+                  </div>
+                </div>
                 {apt.payment_proof_url ? (
                   <div className="apt-detail-payment-done">
                     <CheckCircle size={20} className="apt-detail-payment-done__icon" />
-                    <span>Comprobante enviado.</span>
+                    <span>Comprobante del 50% enviado. Estamos verificando el pago.</span>
                     <a href={apt.payment_proof_url} target="_blank" rel="noreferrer" className="btn btn--secondary btn--sm">
                       Ver comprobante
                     </a>
@@ -400,7 +441,7 @@ export default function AppointmentDetail() {
                 ) : (
                   <div className="apt-detail-payment-upload">
                     <p className="apt-detail-payment-hint">
-                      Adjunta la captura o PDF del pago para confirmar tu cita.
+                      Adjunta la captura o PDF del pago del <strong>50% ({`$${(Number(quotation?.total || 0) * 0.5).toFixed(2)}`})</strong> para confirmar tu cita.
                     </p>
                     <label className="apt-detail-file-label">
                       <input

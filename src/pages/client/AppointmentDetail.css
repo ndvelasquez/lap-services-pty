@@ -162,6 +162,40 @@ a.apt-detail-media-item:hover img { opacity: 0.85; }
 .apt-detail-quotation-status { margin: 0 0 var(--space-2); font-size: 0.9rem; }
 .apt-detail-quotation-total { margin: 0; font-size: 1rem; color: var(--dark-500); }
 
+/* Deposit breakdown */
+.apt-detail-deposit-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--light-100);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--light-300);
+  overflow: hidden;
+  margin-bottom: var(--space-4);
+}
+.apt-detail-deposit-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.9rem;
+  color: var(--dark-600);
+  border-bottom: 1px solid var(--light-200);
+}
+.apt-detail-deposit-row:last-child { border-bottom: none; }
+.apt-detail-deposit-row--muted { color: var(--dark-400); }
+.apt-detail-deposit-row--total {
+  font-weight: 600;
+  color: var(--dark-700);
+  background: var(--light-200);
+  border-top: 2px solid var(--light-300);
+}
+.apt-detail-deposit-amount {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
 /* Payment */
 .apt-detail-payment-done {
   display: flex;

@@ -533,7 +533,7 @@ export async function requestModification(appointmentId, notes) {
 }
 
 // ============================================================
-// PAYMENT PROOF — Subir comprobante de pago
+// PAYMENT PROOF — Subir comprobante de pago (50% abono)
 // ============================================================
 
 export async function uploadPaymentProof(appointmentId, file) {
@@ -561,10 +561,126 @@ export async function uploadPaymentProof(appointmentId, file) {
     status: 'payment_uploaded'
   }).eq('id', appointmentId)
 
-  // 4. Notificar al admin
+  // 4. Buscar la cotización vinculada para calcular el 50% del abono
+  const { data: quote } = await supabase
+    .from('quotations')
+    .select('id, total')
+    .eq('appointment_id', appointmentId)
+    .eq('status', 'accepted')
+    .single()
+
+  if (quote) {
+    const depositAmount = Number((quote.total * 0.5).toFixed(2))
+    // 5. Registrar el abono (50%) en la tabla de pagos
+    const { error: paymentError } = await supabase.from('payments').insert({
+      appointment_id: appointmentId,
+      quotation_id: quote.id,
+      amount: depositAmount,
+      payment_type: 'deposit',
+      status: 'pending',
+      proof_url: paymentUrl
+    })
+    if (paymentError) console.warn('Error registrando pago en tabla payments:', paymentError.message)
+  }
+
+  // 6. Notificar al admin
   triggerN8nWebhook('/appointment-status', { id: appointmentId, status: 'payment_uploaded' })
 
   return paymentUrl
+}
+
+// ============================================================
+// PAYMENTS — Gestión de abonos y pagos
+// ============================================================
+
+/** Obtiene todos los pagos con datos de cita, cotización y cliente (vista admin) */
+export async function getAdminPayments() {
+  const { data, error } = await supabase
+    .from('payments')
+    .select(`
+      *,
+      appointments(
+        id, appointment_date, start_time, location_address, status,
+        profiles(name, email),
+        appointment_services(services(name))
+      ),
+      quotations(total, subtotal, tax)
+    `)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+/** Verifica un abono (admin confirma que recibió el pago) */
+export async function verifyDeposit(paymentId) {
+  const { error } = await supabase
+    .from('payments')
+    .update({ status: 'verified', verified_at: new Date().toISOString() })
+    .eq('id', paymentId)
+  if (error) throw error
+}
+
+/** Registra el pago final (50% restante) al completar el servicio. Se asume recibido. */
+export async function recordFinalPayment(appointmentId) {
+  // Buscar la cotización y el depósito existente
+  const { data: quote } = await supabase
+    .from('quotations')
+    .select('id, total')
+    .eq('appointment_id', appointmentId)
+    .single()
+
+  if (!quote) return
+
+  const finalAmount = Number((quote.total * 0.5).toFixed(2))
+
+  // Verificar si ya existe el pago final
+  const { data: existing } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('appointment_id', appointmentId)
+    .eq('payment_type', 'final')
+    .single()
+
+  if (!existing) {
+    await supabase.from('payments').insert({
+      appointment_id: appointmentId,
+      quotation_id: quote.id,
+      amount: finalAmount,
+      payment_type: 'final',
+      status: 'verified',
+      verified_at: new Date().toISOString(),
+      notes: 'Pago final asumido al completar el servicio'
+    })
+  }
+}
+
+/** Estadísticas de ingresos para el dashboard */
+export async function getIncomeStats() {
+  // Ingresos confirmados: 100% de citas completadas
+  const { data: completedQuotes } = await supabase
+    .from('quotations')
+    .select('total, appointments!inner(status)')
+    .eq('appointments.status', 'completed')
+  const confirmedIncome = completedQuotes?.reduce((sum, q) => sum + (q.total || 0), 0) || 0
+
+  // Abonos verificados en espera (citas confirmadas, no completadas aún)
+  const { data: pendingDeposits } = await supabase
+    .from('payments')
+    .select('amount, appointments!inner(status)')
+    .eq('payment_type', 'deposit')
+    .eq('status', 'verified')
+    .eq('appointments.status', 'confirmed')
+  const depositsInTransit = pendingDeposits?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
+
+  // Abonos pendientes de verificación
+  const { data: pendingVerification } = await supabase
+    .from('payments')
+    .select('amount')
+    .eq('payment_type', 'deposit')
+    .eq('status', 'pending')
+  const depositsPendingVerification = pendingVerification?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
+
+  return { confirmedIncome, depositsInTransit, depositsPendingVerification }
 }
 
 // ============================================================
@@ -630,5 +746,6 @@ export default {
   acceptQuotation, rejectQuotation, requestModification,
   uploadPaymentProof, getAvailableSlots,
   getServices, createService, getClients, uploadImages,
-  savePushSubscription
+  savePushSubscription,
+  getAdminPayments, verifyDeposit, recordFinalPayment, getIncomeStats
 }

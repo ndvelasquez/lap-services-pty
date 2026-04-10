@@ -281,6 +281,35 @@ export default function QuotationDetail() {
           </div>
         )}
 
+        {/* Payment breakdown — 50/50 policy */}
+        {(isSent || quote.status === 'accepted') && (
+          <div className="card quot-detail-payment-info">
+            <h2 className="quot-detail-section-title">
+              <CheckCircle size={16} /> Política de Pago
+            </h2>
+            <div className="quot-detail-payment-breakdown">
+              <div className="quot-detail-payment-row quot-detail-payment-row--highlight">
+                <div>
+                  <p className="quot-detail-payment-label">Abono inicial (50%)</p>
+                  <p className="quot-detail-payment-desc">A pagar al aceptar esta cotización</p>
+                </div>
+                <span className="quot-detail-payment-amount">${(Number(quote.total || 0) * 0.5).toFixed(2)}</span>
+              </div>
+              <div className="quot-detail-payment-row">
+                <div>
+                  <p className="quot-detail-payment-label">Saldo restante (50%)</p>
+                  <p className="quot-detail-payment-desc">A pagar al finalizar el servicio</p>
+                </div>
+                <span className="quot-detail-payment-amount quot-detail-payment-amount--muted">${(Number(quote.total || 0) * 0.5).toFixed(2)}</span>
+              </div>
+              <div className="quot-detail-payment-total">
+                <span>Total cotizado</span>
+                <span>${Number(quote.total || 0).toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="card quot-detail-actions">
           {isSent && (
@@ -291,7 +320,7 @@ export default function QuotationDetail() {
                   onClick={handleAccept}
                   disabled={actionLoading}
                 >
-                  <CheckCircle size={16} /> {actionLoading ? 'Procesando...' : 'Aceptar cotización'}
+                  <CheckCircle size={16} /> {actionLoading ? 'Procesando...' : 'Aceptar y abonar 50%'}
                 </button>
                 <button
                   className="btn btn--danger"

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Calendar, Clock, Users, DollarSign, TrendingUp, ChevronRight, CheckCircle } from 'lucide-react'
-import { getAllAppointments, supabase } from '../../services/api'
+import { Calendar, Clock, Users, DollarSign, TrendingUp, Wallet } from 'lucide-react'
+import { getAllAppointments, getIncomeStats, supabase } from '../../services/api'
 import './AdminDashboard.css'
 
 const weekData = [
@@ -18,18 +18,16 @@ export default function AdminDashboard() {
   const [appointments, setAppointments] = useState([])
   const [loading, setLoading] = useState(true)
   const [totalClients, setTotalClients] = useState(0)
-  const [historicalIncome, setHistoricalIncome] = useState(0)
+  const [incomeStats, setIncomeStats] = useState({ confirmedIncome: 0, depositsInTransit: 0, depositsPendingVerification: 0 })
   const [chartData, setChartData] = useState([])
 
   const fetchDashboardData = async () => {
     try {
-      const apts = await getAllAppointments()
-      // get total clients (unique users in profiles with role client, or just count logic)
-      const { count: clientCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).neq('role', 'admin')
-      
-      // Calculate historical income from accepted quotations
-      const { data: quotes } = await supabase.from('quotations').select('total').eq('status', 'accepted')
-      const income = quotes?.reduce((sum, q) => sum + (q.total || 0), 0) || 0
+      const [apts, stats, { count: clientCount }] = await Promise.all([
+        getAllAppointments(),
+        getIncomeStats(),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).neq('role', 'admin')
+      ])
       
       const formatted = apts.map(apt => {
         const serviceNames = apt.appointment_services?.map(as => as.services?.name).join(', ') || 'Sin Servicio'
@@ -56,7 +54,7 @@ export default function AdminDashboard() {
 
       setAppointments(formatted)
       setTotalClients(clientCount || 0)
-      setHistoricalIncome(income)
+      setIncomeStats(stats)
       setChartData(last7Days)
     } catch (err) {
       console.error('Error fetching admin dash', err)
@@ -76,10 +74,11 @@ export default function AdminDashboard() {
   const pendingCount = appointments.filter(a => a.status === 'pending' || a.status === 'quotation_sent' || a.status === 'modification_requested').length
 
   const kpis = [
-    { id: 'kpi-today', icon: Calendar, label: 'Citas Hoy', value: todayAppointments.length.toString(), change: null, color: '#2E7D32' },
-    { id: 'kpi-pending', icon: Clock, label: 'Pendientes', value: pendingCount.toString(), change: null, color: '#FF9800' },
-    { id: 'kpi-income', icon: DollarSign, label: 'Ingresos Históricos', value: `$${historicalIncome.toFixed(2)}`, change: null, color: '#4CAF50' },
-    { id: 'kpi-clients', icon: Users, label: 'Clientes Registrados', value: totalClients.toString(), change: '+1 hoy', color: '#2196F3' },
+    { id: 'kpi-today',    icon: Calendar,   label: 'Citas Hoy',              value: todayAppointments.length.toString(),                   change: null,    color: '#2E7D32' },
+    { id: 'kpi-pending',  icon: Clock,      label: 'Pendientes',             value: pendingCount.toString(),                               change: null,    color: '#FF9800' },
+    { id: 'kpi-income',   icon: DollarSign, label: 'Ingresos Confirmados',   value: `$${incomeStats.confirmedIncome.toFixed(2)}`,           change: null,    color: '#4CAF50' },
+    { id: 'kpi-deposits', icon: Wallet,     label: 'Abonos en Tránsito',     value: `$${incomeStats.depositsInTransit.toFixed(2)}`,         change: incomeStats.depositsPendingVerification > 0 ? `$${incomeStats.depositsPendingVerification.toFixed(2)} por verificar` : null, color: '#9C27B0' },
+    { id: 'kpi-clients',  icon: Users,      label: 'Clientes Registrados',   value: totalClients.toString(),                               change: null,    color: '#2196F3' },
   ]
 
   return (
@@ -153,6 +152,41 @@ export default function AdminDashboard() {
         </div>
 
         <div className="admin-dash__side">
+          <div className="card" style={{ marginBottom: 'var(--space-5)' }}>
+            <h2 style={{ marginBottom: 'var(--space-4)' }}>Resumen de Ingresos</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-3) var(--space-4)', background: 'rgba(76,175,80,0.08)', borderRadius: 'var(--radius-lg)', borderLeft: '3px solid #4CAF50' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--dark-400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ingresos confirmados</p>
+                  <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#2E7D32' }}>${incomeStats.confirmedIncome.toFixed(2)}</p>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--dark-400)' }}>Servicios completados</p>
+                </div>
+                <DollarSign size={24} style={{ color: '#4CAF50', opacity: 0.5 }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-3) var(--space-4)', background: 'rgba(156,39,176,0.07)', borderRadius: 'var(--radius-lg)', borderLeft: '3px solid #9C27B0' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--dark-400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Abonos en tránsito</p>
+                  <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#7B1FA2' }}>${incomeStats.depositsInTransit.toFixed(2)}</p>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--dark-400)' }}>50% por servicio pendiente</p>
+                </div>
+                <Wallet size={24} style={{ color: '#9C27B0', opacity: 0.5 }} />
+              </div>
+              {incomeStats.depositsPendingVerification > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-3) var(--space-4)', background: 'rgba(255,152,0,0.08)', borderRadius: 'var(--radius-lg)', borderLeft: '3px solid #FF9800' }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--dark-400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Por verificar</p>
+                    <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#E65100' }}>${incomeStats.depositsPendingVerification.toFixed(2)}</p>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--dark-400)' }}>Comprobantes en revisión</p>
+                  </div>
+                  <Clock size={24} style={{ color: '#FF9800', opacity: 0.5 }} />
+                </div>
+              )}
+              <Link to="/admin/abonos" className="btn btn--secondary btn--sm" style={{ textAlign: 'center' }}>
+                Ver módulo de abonos →
+              </Link>
+            </div>
+          </div>
+
           <div className="card">
             <h2>Actividad Reciente</h2>
             <div className="activity-list" data-testid="activity-list">
