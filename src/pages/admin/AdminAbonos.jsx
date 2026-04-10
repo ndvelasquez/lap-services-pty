@@ -65,11 +65,18 @@ export default function AdminAbonos() {
   // Compute stats
   const depositPayments = payments.filter(p => p.payment_type === 'deposit')
   const pendingTotal = depositPayments.filter(p => p.status === 'pending').reduce((s, p) => s + (p.amount || 0), 0)
-  const verifiedActiveTotal = depositPayments.filter(p => p.status === 'verified' && p.appointments?.status === 'confirmed').reduce((s, p) => s + (p.amount || 0), 0)
-  const completedTotal = payments.filter(p => p.appointments?.status === 'completed').reduce((s, p) => s + (p.amount || 0), 0)
+  // Abonos en tránsito: depósitos verificados cuya cita aún no se completó
+  const verifiedActiveTotal = depositPayments
+    .filter(p => p.status === 'verified' && ['confirmed', 'payment_uploaded'].includes(p.appointments?.status))
+    .reduce((s, p) => s + (p.amount || 0), 0)
+  // Convertido a ingreso: suma de todos los pagos de citas completadas
+  const completedTotal = payments
+    .filter(p => p.appointments?.status === 'completed')
+    .reduce((s, p) => s + (Number(p.amount) || 0), 0)
 
-  // Filter rows
+  // Filter rows — only show deposit payments (final payments are just accounting entries)
   const filtered = payments.filter(p => {
+    if (p.payment_type !== 'deposit') return false
     const aptStatus = p.appointments?.status
     if (filter === 'active') return aptStatus === 'payment_uploaded' || aptStatus === 'confirmed'
     if (filter === 'completed') return aptStatus === 'completed'

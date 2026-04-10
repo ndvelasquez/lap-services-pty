@@ -3,8 +3,8 @@
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "GET",
-        "path": "generate-quotation-pdf",
+        "httpMethod": "POST",
+        "path": "gen-quotation-pdf-v5",
         "responseMode": "responseNode",
         "options": {
           "responseHeaders": {
@@ -28,7 +28,7 @@
     },
     {
       "parameters": {
-        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/quotations?id=eq.{{ $json.query.quotation_id }}&select=*",
+        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/quotations?id=eq.{{ $json.body.quoteId }}&select=*,quotation_items(*),profiles(*)",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "options": {}
@@ -52,7 +52,8 @@
       "parameters": {
         "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/profiles?id=eq.{{ $json.client_id }}&select=*",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "supabaseApi"
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
       },
       "id": "fetch-client",
       "name": "Fetch Client",
@@ -73,7 +74,8 @@
       "parameters": {
         "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/quotation_items?quotation_id=eq.{{ $('Fetch Quotation').item.json.id }}&select=*",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "supabaseApi"
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
       },
       "id": "fetch-items",
       "name": "Fetch Items",
@@ -92,7 +94,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const quote = $('Fetch Quotation').first().json;\nconst client = $('Fetch Client').first().json;\nconst items = $('Fetch Items').all().map(i => i.json);\n\nreturn [{\n  json: {\n    document: {\n      document_template_id: \"969D81C2-BA26-4F6A-97A2-5CD1E612F87D\",\n      payload: {\n        quote_number: quote.id.substring(0,8).toUpperCase(),\n        date: new Date().toLocaleDateString('es-PA'),\n        client_name: client.name,\n        client_email: client.email,\n        client_phone: client.phone || '',\n        subtotal: quote.subtotal.toFixed(2),\n        tax: quote.tax.toFixed(2),\n        total: quote.total.toFixed(2),\n        conditions: quote.conditions || '',\n        items: items.map(i => ({\n          concept: i.concept,\n          description: i.description,\n          quantity: i.quantity,\n          unit_price: i.unit_price.toFixed(2),\n          subtotal: i.subtotal.toFixed(2)\n        }))\n      },\n      status: \"pending\",\n      meta: { quoteId: quote.id }\n    },\n    quoteId: quote.id\n  }\n}];"
+        "jsCode": "const quote = $('Fetch Quotation').first().json;\nconst client = $('Fetch Client').first().json;\nconst items = $('Fetch Items').all().map(i => i.json);\n\nreturn [{\n  json: {\n    document: {\n      document_template_id: \"969D81C2-BA26-4F6A-97A2-5CD1E612F87D\",\n      payload: {\n        quote_number: quote.id.substring(0,8).toUpperCase(),\n        date: new Date().toLocaleDateString('es-PA'),\n        client_name: client.name,\n        client_email: client.email,\n        client_phone: client.phone || '',\n        subtotal: Number(quote.subtotal).toFixed(2),\n        tax: Number(quote.tax).toFixed(2),\n        total: Number(quote.total).toFixed(2),\n        conditions: quote.conditions || '',\n        items: items.map(i => ({\n          concept: i.concept,\n          description: i.description || '',\n          quantity: i.quantity,\n          unit_price: Number(i.unit_price).toFixed(2),\n          subtotal: Number(i.subtotal).toFixed(2)\n        }))\n      },\n      status: \"pending\",\n      meta: { quoteId: quote.id }\n    },\n    quoteId: quote.id\n  }\n}];"
       },
       "id": "prepare-payload",
       "name": "Prepare Payload",
@@ -118,7 +120,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.document) }}",
+        "jsonBody": "={{ JSON.stringify({ document: $json.document }) }}",
         "options": {}
       },
       "id": "create-doc",
@@ -132,7 +134,7 @@
     },
     {
       "parameters": {
-        "amount": 12,
+        "amount": 15,
         "unit": "seconds"
       },
       "id": "wait-for-gen",
@@ -234,12 +236,16 @@
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"pdf_url\": \"https://ntcdwswelewwxmyuhbtr.supabase.co/storage/v1/object/public/lap_quotations/Cotizacion_{{ $('Prepare Payload').item.json.quoteId }}.pdf\",\n  \"status\": \"draft\"\n}",
+        "jsonBody": "={\n  \"pdf_url\": \"https://ntcdwswelewwxmyuhbtr.supabase.co/storage/v1/object/public/lap_quotations/Cotizacion_{{ $('Prepare Payload').item.json.quoteId }}.pdf\",\n  \"pdf_version\": {{ ($('Fetch Quotation').item.json.pdf_version || 0) + 1 }}\n}",
         "options": {}
       },
       "id": "update-quote-db",
@@ -260,7 +266,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"success\": true,\n  \"message\": \"PDF generated and saved successfully\",\n  \"quotation_id\": \"{{ $('Prepare Payload').item.json.quoteId }}\"\n}",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"PDF generated and saved successfully\",\n  \"quotation_id\": \"{{ $('Prepare Payload').item.json.quoteId }}\",\n  \"pdf_url\": \"https://ntcdwswelewwxmyuhbtr.supabase.co/storage/v1/object/public/lap_quotations/Cotizacion_{{ $('Prepare Payload').item.json.quoteId }}.pdf\"\n}",
         "options": {
           "responseHeaders": {
             "entries": [
@@ -294,7 +300,7 @@
         ]
       ]
     },
-    "fetch-quote": {
+    "Fetch Quotation": {
       "main": [
         [
           {
@@ -305,7 +311,7 @@
         ]
       ]
     },
-    "fetch-client": {
+    "Fetch Client": {
       "main": [
         [
           {
@@ -316,7 +322,7 @@
         ]
       ]
     },
-    "fetch-items": {
+    "Fetch Items": {
       "main": [
         [
           {
@@ -327,7 +333,7 @@
         ]
       ]
     },
-    "prepare-payload": {
+    "Prepare Payload": {
       "main": [
         [
           {
@@ -338,7 +344,7 @@
         ]
       ]
     },
-    "create-doc": {
+    "Create PDFMonkey Doc": {
       "main": [
         [
           {
@@ -349,7 +355,7 @@
         ]
       ]
     },
-    "wait-for-gen": {
+    "Wait": {
       "main": [
         [
           {
@@ -360,7 +366,7 @@
         ]
       ]
     },
-    "check-status": {
+    "Check Status": {
       "main": [
         [
           {
@@ -371,7 +377,7 @@
         ]
       ]
     },
-    "download-file": {
+    "Download PDF File": {
       "main": [
         [
           {
@@ -382,7 +388,7 @@
         ]
       ]
     },
-    "upload-supabase": {
+    "Upload to Supabase": {
       "main": [
         [
           {
@@ -393,7 +399,7 @@
         ]
       ]
     },
-    "update-quote-db": {
+    "Update Quotation DB": {
       "main": [
         [
           {

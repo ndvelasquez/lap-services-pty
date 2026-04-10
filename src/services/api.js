@@ -611,13 +611,25 @@ export async function getAdminPayments() {
   return data || []
 }
 
-/** Verifica un abono (admin confirma que recibió el pago) */
+/** Verifica un abono (admin confirma que recibió el pago) y confirma la cita */
 export async function verifyDeposit(paymentId) {
-  const { error } = await supabase
+  // 1. Verificar el pago
+  const { data: payment, error } = await supabase
     .from('payments')
     .update({ status: 'verified', verified_at: new Date().toISOString() })
     .eq('id', paymentId)
+    .select('appointment_id')
+    .single()
   if (error) throw error
+
+  // 2. Actualizar la cita a 'confirmed' si aún está en payment_uploaded
+  if (payment?.appointment_id) {
+    await supabase
+      .from('appointments')
+      .update({ status: 'confirmed' })
+      .eq('id', payment.appointment_id)
+      .eq('status', 'payment_uploaded')
+  }
 }
 
 /** Registra el pago final (50% restante) al completar el servicio. Se asume recibido. */
@@ -663,13 +675,13 @@ export async function getIncomeStats() {
     .eq('appointments.status', 'completed')
   const confirmedIncome = completedQuotes?.reduce((sum, q) => sum + (q.total || 0), 0) || 0
 
-  // Abonos verificados en espera (citas confirmadas, no completadas aún)
+  // Abonos verificados en espera (citas confirmadas o con pago subido, no completadas)
   const { data: pendingDeposits } = await supabase
     .from('payments')
     .select('amount, appointments!inner(status)')
     .eq('payment_type', 'deposit')
     .eq('status', 'verified')
-    .eq('appointments.status', 'confirmed')
+    .in('appointments.status', ['confirmed', 'payment_uploaded'])
   const depositsInTransit = pendingDeposits?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
 
   // Abonos pendientes de verificación
