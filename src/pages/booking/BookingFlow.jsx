@@ -458,12 +458,33 @@ export default function BookingFlow() {
     return acc
   }, {})
 
-  const canNext = () => {
-    if (step === 0) return selectedServices.length > 0
-    if (step === 1) return true // Details are optional
-    if (step === 2) return true // Files are optional
-    if (step === 3) return selectedDate && selectedTime
-    return true
+  const getValidationError = () => {
+    if (step === 0) {
+      if (selectedServices.length === 0) return 'Debes seleccionar al menos un servicio para continuar.'
+    }
+    if (step === 1) {
+      if (hasSpaceService && !spaceDetails.sqm) return 'Ingresa los metros cuadrados del espacio a limpiar.'
+      if (hasCarpet && (!furnitureDetails.carpetWidth || !furnitureDetails.carpetHeight)) return 'Ingresa las medidas de la alfombra (ancho y alto).'
+      if (hasSofa && !furnitureDetails.material) return 'Selecciona el material del sofá.'
+      if (hasRepairService && !repairDetails.description.trim()) return 'Describe el problema o trabajo de reparación necesario.'
+    }
+    if (step === 2) {
+      if (images.length === 0) return 'Adjunta al menos una imagen o video de referencia para continuar.'
+    }
+    if (step === 3) {
+      if (!selectedDate) return 'Selecciona una fecha para la cita.'
+      if (!selectedTime) return 'Selecciona un horario disponible.'
+    }
+    return null
+  }
+
+  const handleNext = () => {
+    const error = getValidationError()
+    if (error) {
+      toastError(error)
+      return
+    }
+    handleStepChange(step + 1)
   }
 
   // Compute end time display for confirmation
@@ -961,7 +982,7 @@ export default function BookingFlow() {
             )}
             <div style={{ flex: 1 }} />
             {step < 4 ? (
-              <button className="btn btn--primary btn--lg" onClick={() => handleStepChange(step + 1)} disabled={!canNext()}>
+              <button className="btn btn--primary btn--lg" onClick={handleNext}>
                 Siguiente <ArrowRight size={18} />
               </button>
             ) : (
