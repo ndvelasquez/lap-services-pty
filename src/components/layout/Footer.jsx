@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Phone, Mail, MapPin, Instagram, Facebook, Clock } from 'lucide-react'
+import { MessageCircle, Mail, MapPin, Instagram, Facebook, Clock } from 'lucide-react'
 import './Footer.css'
 
 export default function Footer() {
@@ -55,8 +55,8 @@ export default function Footer() {
             <h4>Contacto</h4>
             <ul className="footer__contact">
               <li>
-                <Phone size={16} />
-                <a href="tel:+50769841395">+507 6984-1395</a>
+                <MessageCircle size={16} />
+                <a href="https://wa.me/50769841395" target="_blank" rel="noopener noreferrer">Chatea por WhatsApp</a>
               </li>
               <li>
                 <Mail size={16} />

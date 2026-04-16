@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import {
   Sparkles, Sofa, Wind, Wrench, ShoppingBag, Car,
-  ArrowRight, Star, CheckCircle, Phone, ChevronRight
+  ArrowRight, Star, CheckCircle, MessageCircle, ChevronRight
 } from 'lucide-react'
 import './Landing.css'
 
@@ -69,10 +69,10 @@ export default function Landing() {
                 <CheckCircle size={16} />
                 <span>Servicio garantizado</span>
               </div>
-              <div className="hero__trust-item">
-                <Phone size={16} />
-                <span>+507 6984-1395</span>
-              </div>
+              <a href="https://wa.me/50769841395" target="_blank" rel="noopener noreferrer" className="hero__trust-item hero__trust-item--link">
+                <MessageCircle size={16} />
+                <span>Chatea por WhatsApp</span>
+              </a>
             </div>
           </div>
           <div className="hero__visual">

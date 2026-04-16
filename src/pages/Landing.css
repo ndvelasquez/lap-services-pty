@@ -15,6 +15,9 @@
 .hero__trust { display: flex; gap: var(--space-6); }
 .hero__trust-item { display: flex; align-items: center; gap: var(--space-2); color: var(--light-500); font-size: 0.9rem; }
 .hero__trust-item svg { color: var(--primary-light); }
+.hero__trust-item--link { text-decoration: none; transition: all var(--transition-base); cursor: pointer; }
+.hero__trust-item--link:hover { color: var(--accent); }
+.hero__trust-item--link:hover svg { color: var(--accent); }
 
 .hero__visual { position: relative; height: 400px; }
 .hero__card { position: absolute; background: rgba(255,255,255,0.07); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-xl); padding: var(--space-4) var(--space-5); display: flex; align-items: center; gap: var(--space-3); color: var(--light-100); font-weight: 600; font-size: 0.95rem; animation: float 5s ease-in-out infinite; }
