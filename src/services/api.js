@@ -242,6 +242,9 @@ export async function updateAppointment(id, updates) {
   // Trigger n8n if status changed
   if (updates.status) {
     triggerN8nWebhook('/appointment-status', { id, status: updates.status })
+    if (updates.status === 'confirmed') {
+      triggerN8nWebhook('/calendar-sync', { id, status: updates.status })
+    }
   }
   return data
 }

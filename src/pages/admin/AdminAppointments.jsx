@@ -354,7 +354,8 @@ export default function AdminAppointments() {
           service: serviceNames,
           date: dateStr,
           time: apt.start_time?.slice(0, 5),
-          status: apt.status
+          status: apt.status,
+          calendar_sync_status: apt.calendar_sync_status
         }
       })
       setAppointments(formatted)
@@ -467,7 +468,19 @@ export default function AdminAppointments() {
                   <td style={{ padding: 'var(--space-4) var(--space-5)', borderBottom: '1px solid var(--light-300)' }}>{a.date}</td>
                   <td style={{ padding: 'var(--space-4) var(--space-5)', borderBottom: '1px solid var(--light-300)' }}>{a.time}</td>
                   <td style={{ padding: 'var(--space-4) var(--space-5)', borderBottom: '1px solid var(--light-300)' }}>
-                    <span className={`badge badge--${statusClass[a.status] || 'pending'}`}>{statusLabels[a.status] || a.status}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                      <span className={`badge badge--${statusClass[a.status] || 'pending'}`}>{statusLabels[a.status] || a.status}</span>
+                      {a.status === 'confirmed' && a.calendar_sync_status === 'synced' && (
+                        <span title="Evento creado en Google Calendar" style={{ fontSize: '0.7rem', color: '#2E7D32', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                          <Calendar size={11} /> Calendar
+                        </span>
+                      )}
+                      {a.status === 'confirmed' && a.calendar_sync_status === 'fallback_ics' && (
+                        <span title="Google Calendar no disponible — se envió .ics por correo" style={{ fontSize: '0.7rem', color: '#E65100', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                          <Calendar size={11} /> ICS
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td style={{ padding: 'var(--space-4) var(--space-5)', borderBottom: '1px solid var(--light-300)' }}>
                     <div style={{ display: 'flex', gap: 'var(--space-2)' }}>

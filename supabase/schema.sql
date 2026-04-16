@@ -55,7 +55,9 @@ CREATE TABLE public.appointments (
   status appointment_status DEFAULT 'pending'::appointment_status,
   location_address TEXT NOT NULL,
   notes TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  google_event_id TEXT,
+  calendar_sync_status TEXT CHECK (calendar_sync_status IN ('synced','fallback_ics','failed'))
 );
 
 -- 6. Detalles de Servicios Solicitados en la Cita
