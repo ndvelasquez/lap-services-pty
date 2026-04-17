@@ -20,7 +20,12 @@
       "mcp__claude_ai_Supabase__get_logs",
       "mcp__claude_ai_Supabase__deploy_edge_function",
       "Bash(curl -s -X POST https://ntcdwswelewwxmyuhbtr.supabase.co/functions/v1/n8n-proxy -H 'Content-Type: application/json' -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im50Y2R3c3dlbGV3d3hteXVoYnRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2Njk1NDksImV4cCI6MjA5MDI0NTU0OX0.BaoPHHqp5o0ZCQiPllzTf3aMHMuBBFBFknPZfWTbO4E' -d '{\"endpoint\":\"/ping\",\"method\":\"GET\",\"params\":{}}' -w '\\\\nHTTP_STATUS:%{http_code}')",
-      "mcp__claude_ai_Supabase__execute_sql"
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__Desktop_Commander__read_file",
+      "mcp__Desktop_Commander__write_file",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "mcp__Desktop_Commander__edit_block"
     ]
   }
 }
