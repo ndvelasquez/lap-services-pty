@@ -9,30 +9,27 @@ const N8N_BASE_URL = import.meta.env.VITE_N8N_BASE_URL || 'http://localhost:5678
 
 async function triggerN8nWebhook(endpoint, data, method = 'POST') {
   try {
-    // We use the Supabase Edge Function as a proxy to n8n
-    // This solves CORS issues and allows us to keep the n8n URL private
-    const { data: res, error } = await supabase.functions.invoke('n8n-proxy', {
-      body: { 
-        endpoint,
-        method,
-        params: data 
-      }
+    // Direct call to n8n webhook without Edge Function proxy
+    // This avoids the nested body issue from the proxy
+    const n8nHost = import.meta.env.VITE_N8N_HOST || 'https://n8n.srv1444974.hstgr.cloud'
+    const webhookUrl = `${n8nHost}/webhook${endpoint}`
+
+    const response = await fetch(webhookUrl, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
     })
-    
-    if (error) {
-      console.error(`Edge Function proxy error for ${endpoint}:`, error)
-      throw new Error(`Error de red al conectar con el servidor de automatización: ${error.message}`)
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      console.error(`n8n webhook error for ${endpoint}:`, result)
+      throw new Error(`Error en n8n: ${result.message || response.statusText}`)
     }
 
-    // The proxy returns the n8n response. If n8n returns an error field, we throw.
-    if (res && res.error) {
-       console.error(`n8n error for ${endpoint}:`, res.error)
-       throw new Error(`Error en el servidor de automatización: ${res.error}`)
-    }
-    
-    return res
+    return result
   } catch (error) {
-    console.error(`n8n proxy failed at ${endpoint}:`, error)
+    console.error(`n8n webhook failed at ${endpoint}:`, error)
     throw error
   }
 }
@@ -179,10 +176,12 @@ export async function createAppointment(appData) {
 
   // 3. Notificar vía n8n (o cualquier otro sistema externo)
   try {
-    await triggerN8nWebhook('/new-appointment', { 
-      appointment, 
-      client: { name: clientName, email: clientEmail, phone: clientPhone },
-      services: servicesToInsert 
+    await triggerN8nWebhook('/new-appointment', {
+      appointment,
+      clientName,
+      clientEmail,
+      clientPhone,
+      serviceNames
     })
   } catch (error) {
     console.warn('Webhook notification failed, but appointment was created:', error)

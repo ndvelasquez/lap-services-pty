@@ -23,6 +23,18 @@ const statusClass = {
   modification_requested: 'pending'
 }
 
+function buildGcalUrl(apt) {
+  const date = apt.appointment_date?.replace(/-/g, '') || ''
+  const start = `${date}T${(apt.start_time || '').replace(/:/g, '').slice(0, 6)}`
+  const end = `${date}T${(apt.end_time || '').replace(/:/g, '').slice(0, 6)}`
+  const serviceNames = (apt.appointment_services || []).map(s => s.services?.name).filter(Boolean).join(', ') || 'Servicio LAP'
+  const clientName = apt.profiles?.name || ''
+  const text = encodeURIComponent(`Servicio LAP: ${serviceNames} — ${clientName}`)
+  const loc = encodeURIComponent(apt.location_address || '')
+  const details = encodeURIComponent(`Cliente: ${clientName}\nTeléfono: ${apt.profiles?.phone || 'n/a'}\nServicios: ${serviceNames}\nNotas: ${apt.notes || 'Ninguna'}`)
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${start}/${end}&location=${loc}&details=${details}`
+}
+
 function AppointmentDetailModal({ apt, onClose }) {
   if (!apt) return null
 
@@ -200,9 +212,21 @@ function AppointmentDetailModal({ apt, onClose }) {
         {/* Footer */}
         <div style={{
           padding: '16px 24px', borderTop: '1px solid var(--dark-700, #2a2a3e)',
-          display: 'flex', justifyContent: 'flex-end'
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap'
         }}>
-          <button className="btn btn--secondary" onClick={onClose}>Cerrar</button>
+          {apt.status === 'confirmed' && (
+            <a
+              href={buildGcalUrl(apt)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn--secondary btn--sm"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Calendar size={14} />
+              Agregar a Google Calendar
+            </a>
+          )}
+          <button className="btn btn--secondary" style={{ marginLeft: 'auto' }} onClick={onClose}>Cerrar</button>
         </div>
       </div>
     </div>
