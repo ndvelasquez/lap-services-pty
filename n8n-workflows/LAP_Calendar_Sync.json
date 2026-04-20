@@ -4,513 +4,248 @@
     {
       "id": "wh-calendar-sync",
       "name": "Webhook Calendar Sync",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [200, 300],
       "onError": "continueRegularOutput",
       "parameters": {
+        "path": "calendar-sync",
         "httpMethod": "POST",
+        "authentication": "none",
+        "responseMode": "responseNode",
         "options": {
           "responseHeaders": {
             "entries": [
-              {
-                "name": "Access-Control-Allow-Origin",
-                "value": "*"
-              }
+              {"name": "Access-Control-Allow-Origin", "value": "*"}
             ]
           }
-        },
-        "path": "calendar-sync",
-        "responseMode": "responseNode"
+        }
       },
-      "position": [
-        200,
-        300
-      ],
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
       "webhookId": "lap-calendar-sync"
     },
     {
       "id": "if-confirmed",
       "name": "Only if confirmed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [420, 300],
       "parameters": {
         "conditions": {
           "combinator": "and",
           "conditions": [
             {
               "id": "only-confirmed",
-              "leftValue": "={{ $json.status }}",
-              "operator": {
-                "operation": "equals",
-                "type": "string"
-              },
+              "leftValue": "={{ $json.body.status }}",
+              "operator": {"operation": "equals", "type": "string"},
               "rightValue": "confirmed"
             }
           ],
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          }
-        },
-        "options": {}
-      },
-      "position": [
-        420,
-        300
-      ],
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3
+          "options": {"caseSensitive": true, "typeValidation": "strict", "version": 2}
+        }
+      }
     },
     {
-      "credentials": {
-        "supabaseApi": {
-          "id": "gsQUFcI43y3e2L9D",
-          "name": "Supabase account"
-        }
-      },
       "id": "fetch-appointment",
       "name": "Fetch Appointment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [640, 180],
       "onError": "continueRegularOutput",
+      "credentials": {"supabaseApi": {"id": "gsQUFcI43y3e2L9D", "name": "Supabase account"}},
       "parameters": {
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
-        "options": {},
-        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/appointments?id=eq.{{ $('Webhook Calendar Sync').item.json.id }}&select=*,profiles!appointments_client_id_fkey(id,name,email,phone),appointment_services(custom_details,services(name,category))"
-      },
-      "position": [
-        640,
-        180
-      ],
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4
+        "method": "GET",
+        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/appointments?id=eq.{{ $('Webhook Calendar Sync').item.json.body.id }}&select=*,profiles!appointments_client_id_fkey(id,name,email,phone),appointment_services(custom_details,services(name,category))"
+      }
     },
     {
       "id": "build-payload",
       "name": "Build Payload",
-      "parameters": {
-        "jsCode": "// Supabase HTTP Request devuelve un array; n8n lo desenvuelve por item.\n// $input.first().json ya es el objeto de la cita (no necesita [0]).\nconst appt = $input.first().json;\nif (!appt || !appt.id) { throw new Error('Appointment not found'); }\n\nconst client = appt.profiles || {};\nconst services = (appt.appointment_services || []).map(s => s.services?.name).filter(Boolean);\nconst serviceNames = services.join(', ') || 'Servicio LAP';\n\nconst dateStr = appt.appointment_date;\nconst startDT = `${dateStr}T${appt.start_time}`;\nconst endDT = `${dateStr}T${appt.end_time}`;\n\nconst toIcsDT = (d, t) => `${d.replace(/-/g,'')}T${t.replace(/:/g,'').slice(0,6)}`;\nconst icsStart = toIcsDT(dateStr, appt.start_time);\nconst icsEnd = toIcsDT(dateStr, appt.end_time);\n\nconst encode = encodeURIComponent;\nconst gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE` +\n  `&text=${encode('Servicio LAP: ' + serviceNames)}` +\n  `&dates=${icsStart}/${icsEnd}` +\n  `&location=${encode(appt.location_address || '')}` +\n  `&details=${encode('Cita confirmada con LAP Services Panama.')}`;\n\nreturn [{\n  json: {\n    appointment_id: appt.id,\n    client_name: client.name || 'Cliente',\n    client_email: client.email,\n    client_phone: client.phone,\n    date: dateStr,\n    start_time: appt.start_time,\n    end_time: appt.end_time,\n    start_dt: startDT,\n    end_dt: endDT,\n    ics_start: icsStart,\n    ics_end: icsEnd,\n    location: appt.location_address || '',\n    notes: appt.notes || '',\n    service_names: serviceNames,\n    summary: `Servicio LAP: ${serviceNames} - ${client.name || ''}`.trim(),\n    description: `Servicios: ${serviceNames}\\n\\nCliente: ${client.name}\\nTelefono: ${client.phone || 'n/a'}\\n\\nNotas: ${appt.notes || 'Ninguna'}\\n\\nVer cita: https://lapservicepty.com/admin/citas/${appt.id}`,\n    gcal_template_url: gcalUrl\n  }\n}];"
-      },
-      "position": [
-        860,
-        180
-      ],
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2
+      "typeVersion": 2,
+      "position": [860, 180],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const appt = $input.first().json;\nif (!appt || !appt.id) { throw new Error('Appointment not found'); }\n\nconst client = appt.profiles || {};\nconst services = (appt.appointment_services || []).map(s => s.services?.name).filter(Boolean);\nconst serviceNames = services.join(', ') || 'Servicio LAP';\n\nconst dateStr = appt.appointment_date;\nconst startDT = `${dateStr}T${appt.start_time}`;\nconst endDT = `${dateStr}T${appt.end_time}`;\n\nconst toIcsDT = (d, t) => `${d.replace(/-/g,'')}T${t.replace(/:/g,'').slice(0,6)}`;\nconst icsStart = toIcsDT(dateStr, appt.start_time);\nconst icsEnd = toIcsDT(dateStr, appt.end_time);\n\nconst encode = encodeURIComponent;\nconst gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encode('Servicio LAP: ' + serviceNames)}&dates=${icsStart}/${icsEnd}&location=${encode(appt.location_address || '')}&details=${encode('Cita confirmada con LAP Services Panama.')}`;\n\nreturn [{\n  json: {\n    appointment_id: appt.id,\n    client_name: client.name || 'Cliente',\n    client_email: client.email,\n    client_phone: client.phone,\n    date: dateStr,\n    start_time: appt.start_time,\n    end_time: appt.end_time,\n    start_dt: startDT,\n    end_dt: endDT,\n    ics_start: icsStart,\n    ics_end: icsEnd,\n    location: appt.location_address || '',\n    notes: appt.notes || '',\n    service_names: serviceNames,\n    summary: `Servicio LAP: ${serviceNames} - ${client.name || ''}`.trim(),\n    description: `Servicios: ${serviceNames}\\n\\nCliente: ${client.name}\\nTelefono: ${client.phone || 'n/a'}\\n\\nNotas: ${appt.notes || 'Ninguna'}\\n\\nVer cita: https://lapservicepty.com/admin/citas/${appt.id}`,\n    gcal_template_url: gcalUrl\n  }\n}];"
+      }
     },
     {
-      "credentials": {
-        "googleCalendarOAuth2Api": {
-          "id": "ivpyP4Iwmor3d4eX",
-          "name": "Google Calendar account"
-        }
-      },
       "id": "create-gcal-event",
       "name": "Create Google Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [1080, 80],
       "onError": "continueRegularOutput",
+      "credentials": {"googleCalendarOAuth2Api": {"id": "ivpyP4Iwmor3d4eX", "name": "Google Calendar account"}},
       "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendar": {"__rl": true, "mode": "list", "value": "primary"},
+        "start": "={{ $json.start_dt }}",
+        "end": "={{ $json.end_dt }}",
         "additionalFields": {
-          "attendees": "={{ $json.client_email }}",
+          "attendees": "={{ [$json.client_email] }}",
           "description": "={{ $json.description }}",
           "location": "={{ $json.location }}",
           "sendUpdates": "all",
           "summary": "={{ $json.summary }}",
           "timeZone": "America/Panama"
-        },
-        "calendar": {
-          "__rl": true,
-          "mode": "list",
-          "value": "primary"
-        },
-        "end": "={{ $json.end_dt }}",
-        "operation": "create",
-        "resource": "event",
-        "start": "={{ $json.start_dt }}"
-      },
-      "position": [
-        1080,
-        80
-      ],
-      "type": "n8n-nodes-base.googleCalendar",
-      "typeVersion": 1.3
+        }
+      }
     },
     {
       "id": "if-gcal-ok",
       "name": "If GCal OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1300, 80],
       "parameters": {
         "conditions": {
           "combinator": "and",
           "conditions": [
-            {
-              "id": "has-event-id",
-              "leftValue": "={{ $json.id }}",
-              "operator": {
-                "operation": "notEmpty",
-                "type": "string"
-              },
-              "rightValue": ""
-            }
+            {"id": "has-event-id", "leftValue": "={{ $json.id }}", "operator": {"operation": "notEmpty", "type": "string"}, "rightValue": ""}
           ],
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          }
-        },
-        "options": {}
-      },
-      "position": [
-        1300,
-        80
-      ],
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3
+          "options": {"caseSensitive": true, "typeValidation": "strict", "version": 2}
+        }
+      }
     },
     {
-      "credentials": {
-        "supabaseApi": {
-          "id": "gsQUFcI43y3e2L9D",
-          "name": "Supabase account"
-        }
-      },
       "id": "update-synced",
       "name": "Mark as synced",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1520, -40],
       "onError": "continueRegularOutput",
+      "credentials": {"supabaseApi": {"id": "gsQUFcI43y3e2L9D", "name": "Supabase account"}},
       "parameters": {
         "authentication": "predefinedCredentialType",
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=minimal"
-            }
-          ]
-        },
-        "jsonBody": "={\n  \"google_event_id\": \"{{ $('Create Google Calendar Event').item.json.id }}\",\n  \"calendar_sync_status\": \"synced\"\n}",
-        "method": "PATCH",
         "nodeCredentialType": "supabaseApi",
-        "options": {},
-        "sendBody": true,
+        "method": "PATCH",
+        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/appointments?id=eq.{{ $('Build Payload').item.json.appointment_id }}",
         "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/json"}, {"name": "Prefer", "value": "return=minimal"}]},
+        "sendBody": true,
         "specifyBody": "json",
-        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/appointments?id=eq.{{ $('Build Payload').item.json.appointment_id }}"
-      },
-      "position": [
-        1520,
-        -40
-      ],
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4
+        "jsonBody": "={\"google_event_id\": \"{{ $('Create Google Calendar Event').item.json.id }}\", \"calendar_sync_status\": \"synced\"}"
+      }
     },
     {
       "id": "gen-ics",
       "name": "Generate ICS fallback",
-      "parameters": {
-        "jsCode": "const p = $('Build Payload').item.json;\nconst pad = n => String(n).padStart(2,'0');\nconst now = new Date();\nconst dtstamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth()+1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;\n\nconst ics = [\n  'BEGIN:VCALENDAR',\n  'VERSION:2.0',\n  'PRODID:-//LAP Services//Panama//ES',\n  'CALSCALE:GREGORIAN',\n  'METHOD:PUBLISH',\n  'BEGIN:VEVENT',\n  `UID:${p.appointment_id}@lapservicepty.com`,\n  `DTSTAMP:${dtstamp}`,\n  `DTSTART;TZID=America/Panama:${p.ics_start}`,\n  `DTEND;TZID=America/Panama:${p.ics_end}`,\n  `SUMMARY:${p.summary}`,\n  `LOCATION:${p.location.replace(/,/g,'\\\\,')}`,\n  `DESCRIPTION:${p.description.replace(/\\n/g,'\\\\n').replace(/,/g,'\\\\,')}`,\n  'STATUS:CONFIRMED',\n  'END:VEVENT',\n  'END:VCALENDAR'\n].join('\\r\\n');\n\nreturn [{\n  json: {\n    ...p,\n    ics_content: ics,\n    ics_filename: `LAP-cita-${p.appointment_id}.ics`,\n    ics_base64: Buffer.from(ics, 'utf-8').toString('base64')\n  }\n}];"
-      },
-      "position": [
-        1300,
-        280
-      ],
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2
+      "typeVersion": 2,
+      "position": [1300, 280],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const p = $('Build Payload').item.json;\nconst pad = n => String(n).padStart(2,'0');\nconst now = new Date();\nconst dtstamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth()+1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;\n\nconst ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//LAP Services//Panama//ES', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT', `UID:${p.appointment_id}@lapservicepty.com`, `DTSTAMP:${dtstamp}`, `DTSTART;TZID=America/Panama:${p.ics_start}`, `DTEND;TZID=America/Panama:${p.ics_end}`, `SUMMARY:${p.summary}`, `LOCATION:${p.location.replace(/,/g,',')}\", `DESCRIPTION:${p.description.replace(/\\n/g,'\\\\n').replace(/,/g,',')}\", 'STATUS:CONFIRMED', 'END:VEVENT', 'END:VCALENDAR'].join('\\r\\n');\n\nreturn [{\n  json: {...p, ics_content: ics, ics_filename: `LAP-cita-${p.appointment_id}.ics`, ics_base64: Buffer.from(ics, 'utf-8').toString('base64')}\n}];"
+      }
     },
     {
-      "credentials": {
-        "supabaseApi": {
-          "id": "gsQUFcI43y3e2L9D",
-          "name": "Supabase account"
-        }
-      },
       "id": "update-fallback",
       "name": "Mark as fallback_ics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1520, 280],
       "onError": "continueRegularOutput",
+      "credentials": {"supabaseApi": {"id": "gsQUFcI43y3e2L9D", "name": "Supabase account"}},
       "parameters": {
         "authentication": "predefinedCredentialType",
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=minimal"
-            }
-          ]
-        },
-        "jsonBody": "={\n  \"calendar_sync_status\": \"fallback_ics\"\n}",
-        "method": "PATCH",
         "nodeCredentialType": "supabaseApi",
-        "options": {},
-        "sendBody": true,
+        "method": "PATCH",
+        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/appointments?id=eq.{{ $json.appointment_id }}",
         "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/json"}, {"name": "Prefer", "value": "return=minimal"}]},
+        "sendBody": true,
         "specifyBody": "json",
-        "url": "=https://ntcdwswelewwxmyuhbtr.supabase.co/rest/v1/appointments?id=eq.{{ $json.appointment_id }}"
-      },
-      "position": [
-        1520,
-        280
-      ],
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4
+        "jsonBody": "={\"calendar_sync_status\": \"fallback_ics\"}"
+      }
     },
     {
       "id": "build-email",
       "name": "Build Email",
-      "parameters": {
-        "jsCode": "const payload = $('Build Payload').item.json;\nlet ics = null;\ntry { ics = $('Generate ICS fallback').item.json; } catch (e) { ics = null; }\n\nconst isFallback = !!(ics && ics.ics_content);\nconst fecha = new Date(payload.date + 'T12:00:00').toLocaleDateString('es-PA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst hora = payload.start_time ? payload.start_time.slice(0,5) : '';\nconst horaFin = payload.end_time ? payload.end_time.slice(0,5) : '';\nconst calendarNote = isFallback\n  ? '<p><b>Google Calendar no pudo crear el evento automáticamente.</b> Usa el botón de abajo para agregarlo manualmente.</p>'\n  : '<p>✓ El evento fue creado en Google Calendar y le enviamos la invitación al cliente. Si no ves el evento, usa el botón de abajo.</p>';\n\n// ---- EMAIL AL CLIENTE ----\nconst clientSubject = `Tu cita con LAP Services está confirmada — ${fecha}`;\nconst clientHtml = `<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;\"><div style=\"background:linear-gradient(135deg,#2E7D32,#4CAF50);padding:24px;text-align:center;color:white;\"><h1 style=\"margin:0\">LAP Services Panamá</h1><p style=\"margin:8px 0 0\">¡Tu cita está confirmada!</p></div><div style=\"padding:24px;background:#f7faf7;\"><p>Hola <b>${payload.client_name}</b>,</p><p>Hemos confirmado tu cita con los siguientes detalles:</p><table style=\"width:100%;border-collapse:collapse;margin:16px 0;\"><tr><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\"><b>Servicios</b></td><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\">${payload.service_names}</td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\"><b>Fecha</b></td><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\">${fecha}</td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\"><b>Hora</b></td><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\">${hora} – ${horaFin}</td></tr><tr><td style=\"padding:8px;\"><b>Dirección</b></td><td style=\"padding:8px;\">${payload.location}</td></tr></table><p style=\"text-align:center;margin:24px 0;\"><a href=\"${payload.gcal_template_url}\" style=\"background:#2E7D32;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;\">📅 Agregar a Google Calendar</a></p><p style=\"font-size:12px;color:#666;\">Si tienes preguntas, escríbenos por WhatsApp al <a href=\"https://wa.me/50769841395\">+507 6984-1395</a>.</p></div></div>`;\n\n// ---- EMAIL AL ADMIN ----\nconst adminSubject = `[LAP Admin] Cita confirmada: ${payload.client_name} — ${fecha}`;\nconst adminHtml = `<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;\"><div style=\"background:#1B5E20;padding:20px 24px;color:white;\"><h2 style=\"margin:0\">LAP Admin — Cita Confirmada</h2></div><div style=\"padding:24px;background:#f1f8e9;\"><h3 style=\"margin:0 0 16px;color:#1B5E20;\">📋 Detalles de la Cita</h3><table style=\"width:100%;border-collapse:collapse;margin-bottom:16px;\"><tr><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><b>Cliente</b></td><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\">${payload.client_name}</td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><b>Email</b></td><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><a href=\"mailto:${payload.client_email}\">${payload.client_email}</a></td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><b>Teléfono</b></td><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><a href=\"https://wa.me/${(payload.client_phone||'').replace(/[^0-9]/g,'')}\">+507 ${payload.client_phone||'—'}</a></td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><b>Servicios</b></td><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\">${payload.service_names}</td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><b>Fecha</b></td><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\">${fecha}</td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><b>Hora</b></td><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\">${hora} – ${horaFin}</td></tr><tr><td style=\"padding:8px;\"><b>Dirección</b></td><td style=\"padding:8px;\">${payload.location}</td></tr></table>${calendarNote}<p style=\"text-align:center;margin:20px 0;\"><a href=\"${payload.gcal_template_url}\" style=\"background:#1B5E20;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;\">📅 Agregar a Google Calendar</a></p></div></div>`;\n\nreturn [{\n  json: {\n    ...payload,\n    client_subject: clientSubject,\n    client_html: clientHtml,\n    admin_subject: adminSubject,\n    admin_html: adminHtml,\n    is_fallback: isFallback,\n    attach_ics: isFallback,\n    ics_content: ics ? ics.ics_content : null,\n    ics_filename: ics ? ics.ics_filename : null\n  }\n}];"
-      },
-      "position": [
-        1740,
-        120
-      ],
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2
+      "typeVersion": 2,
+      "position": [1740, 120],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const payload = $('Build Payload').item.json;\nlet ics = null;\ntry { ics = $('Generate ICS fallback').item.json; } catch (e) { ics = null; }\n\nconst isFallback = !!(ics && ics.ics_content);\nconst fecha = new Date(payload.date + 'T12:00:00').toLocaleDateString('es-PA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst hora = payload.start_time ? payload.start_time.slice(0,5) : '';\nconst horaFin = payload.end_time ? payload.end_time.slice(0,5) : '';\nconst calendarNote = isFallback ? '<p><b>Google Calendar no pudo crear el evento automáticamente.</b> Usa el botón de abajo para agregarlo manualmente.</p>' : '<p>✓ El evento fue creado en Google Calendar y le enviamos la invitación al cliente. Si no ves el evento, usa el botón de abajo.</p>';\n\nconst clientSubject = `Tu cita con LAP Services está confirmada — ${fecha}`;\nconst clientHtml = `<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;\"><div style=\"background:linear-gradient(135deg,#2E7D32,#4CAF50);padding:24px;text-align:center;color:white;\"><h1 style=\"margin:0\">LAP Services Panamá</h1></div><div style=\"padding:24px;background:#f7faf7;\"><p>Hola <b>${payload.client_name}</b>,</p><p>Tu cita con los siguientes detalles:</p><table style=\"width:100%;border-collapse:collapse;margin:16px 0;\"><tr><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\"><b>Servicios</b></td><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\">${payload.service_names}</td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\"><b>Fecha</b></td><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\">${fecha}</td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\"><b>Hora</b></td><td style=\"padding:8px;border-bottom:1px solid #e0e0e0;\">${hora} – ${horaFin}</td></tr><tr><td style=\"padding:8px;\"><b>Dirección</b></td><td style=\"padding:8px;\">${payload.location}</td></tr></table><p style=\"text-align:center;margin:24px 0;\"><a href=\"${payload.gcal_template_url}\" style=\"background:#2E7D32;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;\">📅 Agregar a Google Calendar</a></p></div></div>`;\n\nconst adminSubject = `[LAP Admin] Cita confirmada: ${payload.client_name} — ${fecha}`;\nconst adminHtml = `<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;\"><div style=\"background:#1B5E20;padding:20px 24px;color:white;\"><h2 style=\"margin:0\">LAP Admin — Cita Confirmada</h2></div><div style=\"padding:24px;background:#f1f8e9;\"><h3 style=\"margin:0 0 16px;color:#1B5E20;\">📋 Detalles de la Cita</h3><table style=\"width:100%;border-collapse:collapse;margin-bottom:16px;\"><tr><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><b>Cliente</b></td><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\">${payload.client_name}</td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><b>Email</b></td><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><a href=\"mailto:${payload.client_email}\">${payload.client_email}</a></td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><b>Servicios</b></td><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\">${payload.service_names}</td></tr><tr><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\"><b>Fecha</b></td><td style=\"padding:8px;border-bottom:1px solid #c8e6c9;\">${fecha}</td></tr></table>${calendarNote}<p style=\"text-align:center;margin:20px 0;\"><a href=\"${payload.gcal_template_url}\" style=\"background:#1B5E20;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;\">📅 Agregar a Google Calendar</a></p></div></div>`;\n\nreturn [{json: {...payload, client_subject: clientSubject, client_html: clientHtml, admin_subject: adminSubject, admin_html: adminHtml, is_fallback: isFallback, attach_ics: isFallback, ics_content: ics ? ics.ics_content : null, ics_filename: ics ? ics.ics_filename : null}}];"
+      }
     },
     {
-      "credentials": {
-        "smtp": {
-          "id": "artdogaUIFL4Iba9",
-          "name": "SMTP account"
-        }
-      },
-      "credentials": {
-        "smtp": {
-          "id": "artdogaUIFL4Iba9",
-          "name": "SMTP account"
-        }
-      },
       "id": "send-email",
       "name": "Send Confirmation Email",
-      "onError": "continueRegularOutput",
-      "parameters": {
-        "emailFormat": "html",
-        "fromEmail": "ndvelasquezl@gmail.com",
-        "html": "={{ $json.client_html }}",
-        "options": {},
-        "subject": "={{ $json.client_subject }}",
-        "toEmail": "={{ $json.client_email }}"
-      },
-      "position": [
-        1960,
-        120
-      ],
       "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1
+      "typeVersion": 2.1,
+      "position": [1960, 120],
+      "onError": "continueRegularOutput",
+      "credentials": {"smtp": {"id": "artdogaUIFL4Iba9", "name": "SMTP account"}},
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "ndvelasquezl@gmail.com",
+        "toEmail": "={{ $json.client_email }}",
+        "subject": "={{ $json.client_subject }}",
+        "emailFormat": "html",
+        "html": "={{ $json.client_html }}"
+      }
     },
     {
-      "credentials": {
-        "smtp": {
-          "id": "artdogaUIFL4Iba9",
-          "name": "SMTP account"
-        }
-      },
       "id": "send-admin-email",
       "name": "Send Admin Email",
-      "onError": "continueRegularOutput",
-      "parameters": {
-        "emailFormat": "html",
-        "fromEmail": "ndvelasquezl@gmail.com",
-        "html": "={{ $json.admin_html }}",
-        "options": {},
-        "subject": "={{ $json.admin_subject }}",
-        "toEmail": "ndvelasquezl@gmail.com"
-      },
-      "position": [
-        2180,
-        120
-      ],
       "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1
+      "typeVersion": 2.1,
+      "position": [2180, 120],
+      "onError": "continueRegularOutput",
+      "credentials": {"smtp": {"id": "artdogaUIFL4Iba9", "name": "SMTP account"}},
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "ndvelasquezl@gmail.com",
+        "toEmail": "ndvelasquezl@gmail.com",
+        "subject": "={{ $json.admin_subject }}",
+        "emailFormat": "html",
+        "html": "={{ $json.admin_html }}"
+      }
     },
     {
       "id": "respond-ok",
       "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [2400, 120],
       "parameters": {
-        "options": {},
         "respondWith": "json",
         "responseBody": "={ \"success\": true, \"calendar_sync_status\": \"{{ $('Build Email').item.json.is_fallback ? 'fallback_ics' : 'synced' }}\" }"
-      },
-      "position": [
-        2400,
-        120
-      ],
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5
+      }
     },
     {
       "id": "respond-skipped",
       "name": "Respond Skipped",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [640, 440],
       "parameters": {
-        "options": {},
         "respondWith": "json",
         "responseBody": "={ \"skipped\": true, \"reason\": \"status_not_confirmed\" }"
-      },
-      "position": [
-        640,
-        440
-      ],
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5
+      }
     }
   ],
   "connections": {
-    "Build Email": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Send Confirmation Email",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Build Payload": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Create Google Calendar Event",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Create Google Calendar Event": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "If GCal OK",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Fetch Appointment": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Build Payload",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Generate ICS fallback": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Mark as fallback_ics",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "If GCal OK": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Mark as synced",
-            "type": "main"
-          }
-        ],
-        [
-          {
-            "index": 0,
-            "node": "Generate ICS fallback",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Mark as fallback_ics": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Build Email",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Mark as synced": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Build Email",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Only if confirmed": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Fetch Appointment",
-            "type": "main"
-          }
-        ],
-        [
-          {
-            "index": 0,
-            "node": "Respond Skipped",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Send Confirmation Email": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Send Admin Email",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Send Admin Email": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Respond OK",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Webhook Calendar Sync": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Only if confirmed",
-            "type": "main"
-          }
-        ]
-      ]
-    }
-  },
-  "active": true,
-  "settings": {
-    "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false
+    "Webhook Calendar Sync": {"main": [[{"node": "Only if confirmed", "type": "main", "index": 0}]]},
+    "Only if confirmed": {"main": [[{"node": "Fetch Appointment", "type": "main", "index": 0}], [{"node": "Respond Skipped", "type": "main", "index": 0}]]},
+    "Fetch Appointment": {"main": [[{"node": "Build Payload", "type": "main", "index": 0}]]},
+    "Build Payload": {"main": [[{"node": "Create Google Calendar Event", "type": "main", "index": 0}]]},
+    "Create Google Calendar Event": {"main": [[{"node": "If GCal OK", "type": "main", "index": 0}]]},
+    "If GCal OK": {"main": [[{"node": "Mark as synced", "type": "main", "index": 0}], [{"node": "Generate ICS fallback", "type": "main", "index": 0}]]},
+    "Mark as synced": {"main": [[{"node": "Build Email", "type": "main", "index": 0}]]},
+    "Generate ICS fallback": {"main": [[{"node": "Mark as fallback_ics", "type": "main", "index": 0}]]},
+    "Mark as fallback_ics": {"main": [[{"node": "Build Email", "type": "main", "index": 0}]]},
+    "Build Email": {"main": [[{"node": "Send Confirmation Email", "type": "main", "index": 0}]]},
+    "Send Confirmation Email": {"main": [[{"node": "Send Admin Email", "type": "main", "index": 0}]]},
+    "Send Admin Email": {"main": [[{"node": "Respond OK", "type": "main", "index": 0}]]}
   }
 }
