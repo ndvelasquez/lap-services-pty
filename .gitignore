@@ -27,3 +27,6 @@ dist-ssr
 
 #configuracion de claude
 .claude/*
+# Claude & MCP local config (contienen tokens)
+.claude/settings.local.json
+.mcp.json
