@@ -1,0 +1,102 @@
+{
+  "name": "LAP - Nueva Cita (Fixed)",
+  "nodes": [
+    {
+      "id": "webhook-appointment",
+      "name": "Webhook Nueva Cita",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [256, 304],
+      "parameters": {
+        "path": "new-appointment",
+        "httpMethod": "POST",
+        "authentication": "none",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "code-format",
+      "name": "Format Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [512, 304],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Webhook now receives data directly without proxy wrapper\nconst body = $input.first().json;\n\nreturn [{\n  json: {\n    appointmentId: body.id || 'N/A',\n    clientName: body.clientName || 'Cliente',\n    clientEmail: body.clientEmail || '',\n    clientPhone: body.clientPhone || '',\n    services: Array.isArray(body.serviceNames) ? body.serviceNames.join(', ') : 'N/A',\n    date: 'N/A',\n    startTime: 'N/A',\n    endTime: 'N/A',\n    location: 'N/A',\n    notes: 'Sin notas',\n    status: body.status || 'pending'\n  }\n}];"
+      }
+    },
+    {
+      "id": "send-admin-email",
+      "name": "Email Admin",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [752, 208],
+      "credentials": {
+        "smtp": {
+          "id": "artdogaUIFL4Iba9",
+          "name": "SMTP account"
+        }
+      },
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "noreply@lapservicepty.com",
+        "toEmail": "ndvelasquezl@gmail.com",
+        "subject": "=🗓️ Nueva Cita — {{ $json.clientName }} — {{ $json.date }}",
+        "emailFormat": "html",
+        "html": "=<div style=\"font-family:'Inter',sans-serif;max-width:600px;margin:0 auto;padding:20px\"><div style=\"background:#0D1117;border-radius:16px;padding:30px;text-align:center\"><h1 style=\"color:#4CAF50;margin:0\">LAP Services PTY</h1></div><div style=\"background:white;border-radius:16px;padding:30px;margin-top:16px;border:1px solid #e0e0e0\"><h2 style=\"color:#1a1a2e\">🗓️ Nueva Solicitud de Cita</h2><table style=\"width:100%;border-collapse:collapse\"><tr><td style=\"padding:8px;font-weight:bold\">Cliente:</td><td>{{ $json.clientName }}</td></tr><tr><td style=\"padding:8px;font-weight:bold\">Email:</td><td>{{ $json.clientEmail }}</td></tr><tr><td style=\"padding:8px;font-weight:bold\">Teléfono:</td><td>{{ $json.clientPhone }}</td></tr><tr><td style=\"padding:8px;font-weight:bold\">Servicios:</td><td>{{ $json.services }}</td></tr></table><p style=\"margin-top:20px;text-align:center\"><strong>Estado:</strong> PENDIENTE</p></div></div>"
+      }
+    },
+    {
+      "id": "send-client-email",
+      "name": "Email Cliente",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [752, 464],
+      "credentials": {
+        "smtp": {
+          "id": "artdogaUIFL4Iba9",
+          "name": "SMTP account"
+        }
+      },
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "noreply@lapservicepty.com",
+        "toEmail": "={{ $json.clientEmail }}",
+        "subject": "LAP Services PTY — Tu cita ha sido recibida ✅",
+        "emailFormat": "html",
+        "html": "=<div style=\"font-family:'Inter',sans-serif;max-width:600px;margin:0 auto;padding:20px\"><div style=\"background:#0D1117;border-radius:16px;padding:30px;text-align:center\"><h1 style=\"color:#4CAF50;margin:0\">LAP Services PTY</h1></div><div style=\"background:white;border-radius:16px;padding:30px;margin-top:16px\"><h2 style=\"color:#1a1a2e\">✅ ¡Solicitud recibida!</h2><p>Hola <strong>{{ $json.clientName }}</strong>,</p><p>Tu cita para <strong>{{ $json.services }}</strong> ha sido registrada.</p><p>El espacio queda reservado por <strong>5 días</strong>.</p><p style=\"color:#666\">— LAP Services PTY</p></div></div>"
+      }
+    },
+    {
+      "id": "respond-appointment",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1056, 304],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Appointment notifications sent' }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "webhook-appointment": {
+      "main": [[{"node": "code-format", "type": "main", "index": 0}]]
+    },
+    "code-format": {
+      "main": [[
+        {"node": "send-admin-email", "type": "main", "index": 0},
+        {"node": "send-client-email", "type": "main", "index": 0}
+      ]]
+    },
+    "send-admin-email": {
+      "main": [[{"node": "respond-appointment", "type": "main", "index": 0}]]
+    },
+    "send-client-email": {
+      "main": [[{"node": "respond-appointment", "type": "main", "index": 0}]]
+    }
+  }
+}
