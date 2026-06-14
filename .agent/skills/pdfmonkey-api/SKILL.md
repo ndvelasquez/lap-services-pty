@@ -14,7 +14,7 @@ PDFMonkey is a PDF generation SaaS that uses **Liquid** templating syntax. This 
 - **Base URL**: `https://api.pdfmonkey.io/api/v1`
 
 ### LAP Services PTY Credentials
-- **API Key**: `TY8pHuwBHW644uRbVBk4`
+- **API Key**: configurada como variable de entorno `PDFMONKEY_API_KEY` / credencial n8n (ver SECURITY.md)
 - **Template ID**: `969D81C2-BA26-4F6A-97A2-5CD1E612F87D`
 - **Template Name**: `cotizacion`
 
@@ -143,7 +143,7 @@ Check `document.status`:
 3. **Verify** by fetching the template again and checking for correct syntax.
 
 ### Reference Script
-See `update-pdfmonkey-template.mjs` in the project root for a complete, working example.
+See `scripts/update-pdfmonkey-template.mjs` for a complete, working example.
 
 ## LAP Cotización Template Data Schema
 

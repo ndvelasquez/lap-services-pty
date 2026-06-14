@@ -1,35 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import AdminServices from './AdminServices'
-import { supabase } from '../../lib/supabase'
+import * as api from '../../services/api'
 
-// Mock the supabase client dependency
-vi.mock('../../lib/supabase', () => ({
-  supabase: {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        order: vi.fn(() => ({
-          then: (cb) => cb({ data: [
-            { id: '1', name: 'Servicio A', active: true, base_price: 50.00, category: 'Hogar' },
-            { id: '2', name: 'Servicio B', active: false, base_price: 0, category: 'Empresa' }
-          ], error: null })
-        }))
-      })),
-      update: vi.fn(() => ({
-          eq: vi.fn(() => ({
-              then: (cb) => cb({ error: null })
-          }))
-      })),
-      delete: vi.fn(() => ({
-          eq: vi.fn(() => ({
-              then: (cb) => cb({ error: null })
-          }))
-      })),
-      insert: vi.fn(() => ({
-          then: (cb) => cb({ error: null })
-      }))
-    }))
-  }
+// Mock de la capa de datos (módulo services-catalog vía barrel services/api)
+vi.mock('../../services/api', () => ({
+  getAllServices: vi.fn(),
+  createService: vi.fn(),
+  updateService: vi.fn(),
+  toggleServiceActive: vi.fn()
 }))
 
 describe('AdminServices Component', () => {
@@ -37,6 +16,13 @@ describe('AdminServices Component', () => {
     vi.clearAllMocks()
     vi.stubGlobal('confirm', vi.fn(() => true))
     vi.stubGlobal('alert', vi.fn())
+    api.getAllServices.mockResolvedValue([
+      { id: '1', name: 'Servicio A', active: true, base_price: 50.00, category: 'Hogar' },
+      { id: '2', name: 'Servicio B', active: false, base_price: 0, category: 'Empresa' }
+    ])
+    api.createService.mockResolvedValue([])
+    api.updateService.mockResolvedValue(undefined)
+    api.toggleServiceActive.mockResolvedValue(undefined)
   })
 
   it('debe listar los servicios correctamente', async () => {
@@ -81,8 +67,7 @@ describe('AdminServices Component', () => {
     fireEvent.click(saveBtn)
 
     await waitFor(() => {
-        expect(supabase.from).toHaveBeenCalledWith('services')
-        // The mock update implementation is called through its builder pattern
+        expect(api.updateService).toHaveBeenCalled()
     })
   })
 })

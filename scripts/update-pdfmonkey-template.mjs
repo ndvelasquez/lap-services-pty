@@ -9,10 +9,14 @@
  * 
  * This script updates BOTH so the change takes effect immediately.
  * 
- * Usage: node update-pdfmonkey-template.mjs
+ * Usage: PDFMONKEY_API_KEY=xxxx node update-pdfmonkey-template.mjs
  */
 
-const PDFMONKEY_API_KEY = 'TY8pHuwBHW644uRbVBk4';
+const PDFMONKEY_API_KEY = process.env.PDFMONKEY_API_KEY;
+if (!PDFMONKEY_API_KEY) {
+  console.error('Falta la variable de entorno PDFMONKEY_API_KEY. Ver SECURITY.md.');
+  process.exit(1);
+}
 const TEMPLATE_ID = '969D81C2-BA26-4F6A-97A2-5CD1E612F87D';
 const API_BASE = 'https://api.pdfmonkey.io/api/v1';
 

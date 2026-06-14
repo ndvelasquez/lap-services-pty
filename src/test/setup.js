@@ -30,6 +30,18 @@ vi.mock('@supabase/supabase-js', () => ({
   })),
 }))
 
+// Mock de SweetAlert2 — su animación/DOM no es compatible con jsdom
+// (lanza "swalPromiseResolve is not a function"). Devolvemos confirmaciones
+// resueltas para que los flujos de UI continúen en los tests.
+vi.mock('sweetalert2', () => ({
+  default: {
+    fire: vi.fn(() => Promise.resolve({ isConfirmed: true, value: true })),
+    mixin: vi.fn(() => ({ fire: vi.fn(() => Promise.resolve({ isConfirmed: true })) })),
+    close: vi.fn(),
+    showLoading: vi.fn(),
+  },
+}))
+
 // Mock de fetch global
 global.fetch = vi.fn(() =>
   Promise.resolve({

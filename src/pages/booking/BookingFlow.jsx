@@ -4,32 +4,11 @@ import { CheckCircle, ArrowLeft, ArrowRight, Upload, X, ChevronLeft, ChevronRigh
 import { getCurrentUser, createAppointment, uploadImages, getAvailableSlots } from '../../services/api'
 import { alertWarning, alertSuccess, toastError } from '../../lib/notifications'
 import { compressVideo, isVideoCompressionSupported } from '../../lib/utils/videoCompressor'
+import {
+  SERVICES_LIST, ROOMS, FLOOR_TYPES, AC_TYPES, FURNITURE_MATERIALS,
+  getCategoryFromId, estimateServiceDuration
+} from '../../features/services-catalog/catalog'
 import './BookingFlow.css'
-
-const SERVICES_LIST = [
-  { id: '00000000-0000-0000-0000-000000000001', cat: 'Limpieza de Espacios', name: 'Limpieza de Apartamento' },
-  { id: '00000000-0000-0000-0000-000000000002', cat: 'Limpieza de Espacios', name: 'Limpieza de Casa' },
-  { id: '00000000-0000-0000-0000-000000000003', cat: 'Limpieza de Espacios', name: 'Limpieza de Oficina' },
-  { id: '00000000-0000-0000-0000-000000000004', cat: 'Limpieza de Espacios', name: 'Limpieza Post-Remodelación' },
-  { id: '00000000-0000-0000-0000-000000000005', cat: 'Muebles', name: 'Limpieza de Sofás' },
-  { id: '00000000-0000-0000-0000-000000000006', cat: 'Muebles', name: 'Limpieza de Colchones' },
-  { id: '00000000-0000-0000-0000-000000000007', cat: 'Muebles', name: 'Limpieza de Alfombras' },
-  { id: '00000000-0000-0000-0000-000000000008', cat: 'Muebles', name: 'Sillas de Oficina' },
-  { id: '00000000-0000-0000-0000-000000000009', cat: 'Muebles', name: 'Persianas Rollers' },
-  { id: '00000000-0000-0000-0000-000000000010', cat: 'Aire Acondicionado', name: 'Lavado de Split' },
-  { id: '00000000-0000-0000-0000-000000000011', cat: 'Aire Acondicionado', name: 'Aire Central' },
-  { id: '00000000-0000-0000-0000-000000000012', cat: 'Aire Acondicionado', name: 'Instalación de AC' },
-  { id: '00000000-0000-0000-0000-000000000013', cat: 'Auto Detailing', name: 'Auto Detailing Interior' },
-  { id: '00000000-0000-0000-0000-000000000014', cat: 'Auto Detailing', name: 'Lavado Completo Auto' },
-  { id: '00000000-0000-0000-0000-000000000015', cat: 'Reparaciones', name: 'Plomería' },
-  { id: '00000000-0000-0000-0000-000000000016', cat: 'Reparaciones', name: 'Electricidad' },
-  { id: '00000000-0000-0000-0000-000000000017', cat: 'Reparaciones', name: 'Pintura General' },
-]
-
-const ROOMS = ['Sala', 'Cocina', 'Comedor', 'Dormitorio Principal', 'Dormitorio 2', 'Dormitorio 3', 'Baño Principal', 'Baño 2', 'Balcón', 'Lavandería', 'Terraza']
-const FLOOR_TYPES = ['Cerámica', 'Porcelanato', 'Madera', 'Mármol', 'Vinilo', 'Granito', 'Otro']
-const AC_TYPES = ['Split', 'Ventana', 'Central', 'Cassette']
-const FURNITURE_MATERIALS = ['Tela', 'Cuero', 'Microfibra', 'Cuero sintético', 'Otro']
 
 // NEW ORDER: Servicios → Detalles → Archivos → Fecha y Hora → Confirmación
 const STEP_LABELS = ['Servicios', 'Detalles', 'Archivos', 'Fecha y Hora', 'Confirmación']
@@ -50,104 +29,6 @@ function getMonthDays(year, month) {
 
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
-
-/**
- * Estimates total service duration in minutes based on selected services and their details.
- * These are industry-standard estimates for professional cleaning services.
- */
-function estimateServiceDuration(selectedServices, spaceDetails, furnitureDetails, acDetails) {
-  let totalMinutes = 0
-
-  for (const serviceId of selectedServices) {
-    const service = SERVICES_LIST.find(s => s.id === serviceId)
-    if (!service) continue
-
-    switch (serviceId) {
-      // Limpieza de Espacios
-      case '00000000-0000-0000-0000-000000000001': { // Apartamento
-        const sqm = parseFloat(spaceDetails.sqm) || 50
-        totalMinutes += Math.max(120, Math.ceil(sqm * 2)) // ~2 min/m², mínimo 2h
-        break
-      }
-      case '00000000-0000-0000-0000-000000000002': { // Casa
-        const sqm = parseFloat(spaceDetails.sqm) || 80
-        totalMinutes += Math.max(150, Math.ceil(sqm * 2)) // ~2 min/m², mínimo 2.5h
-        break
-      }
-      case '00000000-0000-0000-0000-000000000003': { // Oficina
-        const sqm = parseFloat(spaceDetails.sqm) || 60
-        totalMinutes += Math.max(120, Math.ceil(sqm * 1.5)) // ~1.5 min/m², mínimo 2h
-        break
-      }
-      case '00000000-0000-0000-0000-000000000004': { // Post-Remodelación
-        const sqm = parseFloat(spaceDetails.sqm) || 60
-        totalMinutes += Math.max(180, Math.ceil(sqm * 3)) // ~3 min/m², mínimo 3h
-        break
-      }
-      // Muebles
-      case '00000000-0000-0000-0000-000000000005': // Sofás
-        totalMinutes += (furnitureDetails.seats || 2) * 30 // ~30 min/asiento
-        break
-      case '00000000-0000-0000-0000-000000000006': { // Colchones
-        const sizeMap = { 'Twin': 45, 'Full': 60, 'Queen': 75, 'King': 90 }
-        totalMinutes += sizeMap[furnitureDetails.mattressSize] || 75
-        break
-      }
-      case '00000000-0000-0000-0000-000000000007': { // Alfombras
-        const w = parseFloat(furnitureDetails.carpetWidth) || 200
-        const h = parseFloat(furnitureDetails.carpetHeight) || 300
-        const unit = furnitureDetails.carpetUnit
-        // Convert to m² if in cm or inches
-        let areaSqm
-        if (unit === 'pulgadas') {
-          areaSqm = (w * 0.0254) * (h * 0.0254)
-        } else {
-          areaSqm = (w / 100) * (h / 100) // cm to m
-        }
-        totalMinutes += Math.max(30, Math.ceil(areaSqm * 5)) // ~5 min/m²
-        break
-      }
-      case '00000000-0000-0000-0000-000000000008': // Sillas de Oficina
-        totalMinutes += (furnitureDetails.pieces || 1) * 15 // ~15 min/pieza
-        break
-      case '00000000-0000-0000-0000-000000000009': // Persianas Rollers
-        totalMinutes += (furnitureDetails.pieces || 1) * 20 // ~20 min/pieza
-        break
-      // Aire Acondicionado
-      case '00000000-0000-0000-0000-000000000010': // Split
-        totalMinutes += (acDetails.qty || 1) * 60 // ~60 min/unidad
-        break
-      case '00000000-0000-0000-0000-000000000011': // Central
-        totalMinutes += (acDetails.qty || 1) * 120 // ~120 min/unidad
-        break
-      case '00000000-0000-0000-0000-000000000012': // Instalación
-        totalMinutes += (acDetails.qty || 1) * 180 // ~180 min/unidad
-        break
-      // Auto Detailing
-      case '00000000-0000-0000-0000-000000000013': // Interior
-        totalMinutes += 150
-        break
-      case '00000000-0000-0000-0000-000000000014': // Lavado Completo
-        totalMinutes += 120
-        break
-      // Reparaciones
-      case '00000000-0000-0000-0000-000000000015': // Plomería
-        totalMinutes += 120
-        break
-      case '00000000-0000-0000-0000-000000000016': // Electricidad
-        totalMinutes += 90
-        break
-      case '00000000-0000-0000-0000-000000000017': // Pintura
-        totalMinutes += 180
-        break
-      default:
-        totalMinutes += 60 // Fallback 1h
-    }
-  }
-
-  // Minimum 60 minutes for any service combo
-  return Math.max(60, totalMinutes)
-}
 
 /**
  * Formats minutes into a human-readable string like "2h 30min"
@@ -248,17 +129,30 @@ function generateAvailableSlots(existingAppointments, serviceDurationMinutes) {
 }
 
 
+const WIZARD_STORAGE_KEY = 'lap_booking_wizard'
+
+/** Lee el snapshot persistido del wizard (sin imágenes, que no son serializables). */
+function readWizardSnapshot() {
+  try {
+    const raw = sessionStorage.getItem(WIZARD_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
 export default function BookingFlow() {
   const navigate = useNavigate()
+  const _snap = readWizardSnapshot()
   const [user, setUser] = useState(null)
-  const [step, setStep] = useState(0)
-  const [selectedServices, setSelectedServices] = useState([])
+  const [step, setStep] = useState(_snap.step ?? 0)
+  const [selectedServices, setSelectedServices] = useState(_snap.selectedServices ?? [])
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
   const [selectedDate, setSelectedDate] = useState(null)
   const [selectedTime, setSelectedTime] = useState(null) // now stores 24h format "HH:MM"
   const [images, setImages] = useState([])
-  const [notes, setNotes] = useState('')
+  const [notes, setNotes] = useState(_snap.notes ?? '')
   const [loading, setLoading] = useState(false)
   const [videoProgress, setVideoProgress] = useState(null)
   
@@ -272,10 +166,18 @@ export default function BookingFlow() {
   }, [])
 
   // Detail forms state
-  const [spaceDetails, setSpaceDetails] = useState({ type: 'Apartamento', sqm: '', floor: '', rooms: [] })
-  const [furnitureDetails, setFurnitureDetails] = useState({ material: '', seats: 2, pieces: 1, mattressSize: 'Queen', carpetWidth: '', carpetHeight: '', carpetUnit: 'cm', notes: '' })
-  const [acDetails, setAcDetails] = useState({ type: 'Split', qty: 1, brand: '', btu: '12,000' })
-  const [repairDetails, setRepairDetails] = useState({ description: '' })
+  const [spaceDetails, setSpaceDetails] = useState(_snap.spaceDetails ?? { type: 'Apartamento', sqm: '', floor: '', rooms: [] })
+  const [furnitureDetails, setFurnitureDetails] = useState(_snap.furnitureDetails ?? { material: '', seats: 2, pieces: 1, mattressSize: 'Queen', carpetWidth: '', carpetHeight: '', carpetUnit: 'cm', notes: '' })
+  const [acDetails, setAcDetails] = useState(_snap.acDetails ?? { type: 'Split', qty: 1, brand: '', btu: '12,000' })
+  const [repairDetails, setRepairDetails] = useState(_snap.repairDetails ?? { description: '' })
+
+  // Persistir el progreso del wizard para no perderlo al refrescar (excluye imágenes).
+  useEffect(() => {
+    const snapshot = { step, selectedServices, notes, spaceDetails, furnitureDetails, acDetails, repairDetails }
+    try {
+      sessionStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(snapshot))
+    } catch { /* sessionStorage lleno o no disponible: ignorar */ }
+  }, [step, selectedServices, notes, spaceDetails, furnitureDetails, acDetails, repairDetails])
 
   const toggleService = (id) => {
     setSelectedServices(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id])
@@ -288,8 +190,7 @@ export default function BookingFlow() {
     }))
   }
 
-  // Computed values
-  const getCategoryFromId = (id) => SERVICES_LIST.find(s => s.id === id)?.cat
+  // Computed values (getCategoryFromId viene del módulo services-catalog)
   const hasSpaceService = selectedServices.some(id => getCategoryFromId(id) === 'Limpieza de Espacios')
   const hasFurnitureService = selectedServices.some(id => getCategoryFromId(id) === 'Muebles')
   const hasACService = selectedServices.some(id => getCategoryFromId(id) === 'Aire Acondicionado')
@@ -442,6 +343,7 @@ export default function BookingFlow() {
       }
 
       await createAppointment(appData)
+      sessionStorage.removeItem(WIZARD_STORAGE_KEY) // limpiar progreso tras éxito
       await alertSuccess('¡Solicitud Enviada!', 'Recibirás tu cotización al correo pronto.')
       navigate('/mi-panel')
     } catch (err) {

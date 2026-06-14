@@ -1,14 +1,28 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
+// Dominio(s) permitidos para CORS. Configurar ALLOWED_ORIGIN en los secrets de la
+// edge function (Supabase → Functions → Secrets). Fallback al sitio de producción.
+const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') || 'https://lapservicepty.com'
+// Secreto compartido para autenticar las llamadas del frontend al proxy.
+const WEBHOOK_SECRET = Deno.env.get('WEBHOOK_SECRET') || ''
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  // Validar secreto compartido antes de proxear nada.
+  if (WEBHOOK_SECRET && req.headers.get('x-webhook-secret') !== WEBHOOK_SECRET) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 },
+    )
   }
 
   try {
@@ -86,10 +100,10 @@ serve(async (req) => {
   } catch (error) {
     console.error("n8n-proxy Error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
+      JSON.stringify({ error: 'Bad request' }),
+      {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400 
+        status: 400
       },
     )
   }

@@ -9,26 +9,11 @@ import {
   uploadPaymentProof, requestModification
 } from '../../services/api'
 import { toastSuccess, toastError, alertConfirm } from '../../lib/notifications'
+import {
+  APPOINTMENT_STATUS_LABELS as STATUS_LABELS,
+  APPOINTMENT_STATUS_CLASS as STATUS_CLASS
+} from '../../shared/status'
 import './AppointmentDetail.css'
-
-const STATUS_LABELS = {
-  pending: 'Pendiente',
-  quotation_sent: 'Cotización Enviada',
-  payment_uploaded: 'Pago en Revisión',
-  confirmed: 'Confirmada',
-  completed: 'Completada',
-  cancelled: 'Cancelada',
-  modification_requested: 'Cambio Solicitado'
-}
-const STATUS_CLASS = {
-  pending: 'pending',
-  quotation_sent: 'pending',
-  payment_uploaded: 'confirmed',
-  confirmed: 'confirmed',
-  completed: 'completed',
-  cancelled: 'cancelled',
-  modification_requested: 'pending'
-}
 
 const TIMELINE_STEPS = [
   { key: 'pending',               label: 'Solicitud enviada' },
@@ -152,6 +137,17 @@ export default function AppointmentDetail() {
 
   async function handlePaymentUpload() {
     if (!paymentFile) return
+    // Validar tipo y tamaño antes de subir
+    const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+    const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
+    if (!ALLOWED.includes(paymentFile.type)) {
+      toastError('Formato no válido. Sube una imagen (JPG, PNG, WEBP) o un PDF.')
+      return
+    }
+    if (paymentFile.size > MAX_BYTES) {
+      toastError('El archivo supera el límite de 10 MB.')
+      return
+    }
     setPaymentUploading(true)
     try {
       await uploadPaymentProof(apt.id, paymentFile)
@@ -217,7 +213,7 @@ export default function AppointmentDetail() {
   services.forEach(s => {
     let imgs = s.images
     if (typeof imgs === 'string') {
-      try { imgs = JSON.parse(imgs) } catch(e) { imgs = [imgs] }
+      try { imgs = JSON.parse(imgs) } catch { imgs = [imgs] }
     }
     if (Array.isArray(imgs)) {
       imgs.forEach(url => {
@@ -512,7 +508,7 @@ export default function AppointmentDetail() {
                 </div>
               ) : (
                 <ol className="apt-detail-timeline-list">
-                  {TIMELINE_STEPS.filter(s => s.key !== 'modification_requested' || apt.status === 'modification_requested').map((step, i) => {
+                  {TIMELINE_STEPS.filter(s => s.key !== 'modification_requested' || apt.status === 'modification_requested').map((step) => {
                     const stepIdx = TIMELINE_ORDER.indexOf(step.key)
                     let state = 'future'
                     if (stepIdx < currentStepIndex) state = 'past'

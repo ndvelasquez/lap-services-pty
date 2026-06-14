@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, Clock, Users, DollarSign, TrendingUp, Wallet } from 'lucide-react'
-import { getAllAppointments, getIncomeStats, supabase } from '../../services/api'
+import { getAllAppointments, getIncomeStats, getClientCount } from '../../services/api'
 import './AdminDashboard.css'
 
 const weekData = [
@@ -23,10 +23,10 @@ export default function AdminDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const [apts, stats, { count: clientCount }] = await Promise.all([
+      const [apts, stats, clientCount] = await Promise.all([
         getAllAppointments(),
         getIncomeStats(),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).neq('role', 'admin')
+        getClientCount()
       ])
       
       const formatted = apts.map(apt => {

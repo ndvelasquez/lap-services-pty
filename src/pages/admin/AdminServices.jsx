@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Edit2, CheckCircle, XCircle, Trash2 } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { getAllServices, createService, updateService, toggleServiceActive } from '../../services/api'
 import { alertWarning, toastSuccess, toastError } from '../../lib/notifications'
 
 export default function AdminServices() {
@@ -19,8 +19,7 @@ export default function AdminServices() {
   async function fetchServices() {
     setLoading(true)
     try {
-       const { data, error } = await supabase.from('services').select('*').order('name')
-       if (error) throw error
+       const data = await getAllServices()
        setServices(data || [])
     } catch (err) {
        console.error('Error fetching services', err)
@@ -42,24 +41,16 @@ export default function AdminServices() {
     if (!currentService.name) return alertWarning('Campo requerido', 'El nombre del servicio es requerido.')
     setSaving(true)
     try {
+      const payload = {
+        name: currentService.name,
+        active: currentService.active,
+        category: currentService.category,
+        base_price: currentService.base_price ? parseFloat(currentService.base_price) : 0
+      }
       if (currentService.id) {
-         // Update
-         const { error } = await supabase.from('services').update({ 
-             name: currentService.name, 
-             active: currentService.active,
-             category: currentService.category,
-             base_price: currentService.base_price ? parseFloat(currentService.base_price) : 0
-         }).eq('id', currentService.id)
-         if (error) throw error
+         await updateService(currentService.id, payload)
       } else {
-         // Insert
-         const { error } = await supabase.from('services').insert([{ 
-             name: currentService.name, 
-             active: currentService.active,
-             category: currentService.category,
-             base_price: currentService.base_price ? parseFloat(currentService.base_price) : 0
-         }])
-         if (error) throw error
+         await createService(payload)
       }
       setIsEditing(false)
       fetchServices()
@@ -74,8 +65,7 @@ export default function AdminServices() {
 
   const handleToggleActive = async (service) => {
      try {
-       const { error } = await supabase.from('services').update({ active: !service.active }).eq('id', service.id)
-       if (error) throw error
+       await toggleServiceActive(service)
        fetchServices()
      } catch (err) {
        console.error(err)

@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import PublicLayout from './components/layout/PublicLayout'
 import AdminLayout from './components/layout/AdminLayout'
+import ProtectedRoute from './components/auth/ProtectedRoute'
 import Landing from './pages/Landing'
 import Services from './pages/Services'
 import Login from './pages/auth/Login'
@@ -33,15 +34,18 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/registro" element={<Register />} />
 
-      {/* Client Routes */}
-      <Route element={<PublicLayout />}>
-        <Route path="/mi-panel" element={<ClientDashboard />} />
-        <Route path="/mi-panel/citas/:id" element={<ClientAppointmentDetail />} />
-        <Route path="/mi-panel/cotizaciones/:id" element={<ClientQuotationDetail />} />
+      {/* Client Routes (requieren sesión) */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<PublicLayout />}>
+          <Route path="/mi-panel" element={<ClientDashboard />} />
+          <Route path="/mi-panel/citas/:id" element={<ClientAppointmentDetail />} />
+          <Route path="/mi-panel/cotizaciones/:id" element={<ClientQuotationDetail />} />
+        </Route>
       </Route>
 
-      {/* Admin Routes */}
-      <Route path="/admin" element={<AdminLayout />}>
+      {/* Admin Routes (requieren rol admin) */}
+      <Route element={<ProtectedRoute requireRole="admin" />}>
+        <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<AdminDashboard />} />
         <Route path="calendario" element={<AdminCalendar />} />
         <Route path="citas" element={<AdminAppointments />} />
@@ -51,7 +55,8 @@ function App() {
         <Route path="abonos" element={<AdminAbonos />} />
         <Route path="servicios" element={<AdminServices />} />
         <Route path="clientes" element={<AdminClients />} />
-        <Route path="configuracion" element={<AdminSettings />} />
+          <Route path="configuracion" element={<AdminSettings />} />
+        </Route>
       </Route>
     </Routes>
   )

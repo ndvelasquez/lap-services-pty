@@ -114,7 +114,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer TY8pHuwBHW644uRbVBk4"
+              "value": "Bearer {{ $env.PDFMONKEY_API_KEY }}"
             }
           ]
         },
@@ -154,7 +154,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer TY8pHuwBHW644uRbVBk4"
+              "value": "Bearer {{ $env.PDFMONKEY_API_KEY }}"
             }
           ]
         },

@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Calendar, Bell, ChevronRight, Clock, MapPin, PlusCircle, X } from 'lucide-react'
 import { getCurrentUser, getClientAppointments, savePushSubscription } from '../../services/api'
+import {
+  APPOINTMENT_STATUS_LABELS as statusLabels,
+  APPOINTMENT_STATUS_CLASS as statusClass
+} from '../../shared/status'
 import './ClientDashboard.css'
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || ''
@@ -13,8 +17,6 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)))
 }
 
-const statusLabels = { pending: 'Pendiente', quotation_sent: 'Cotización Enviada', payment_uploaded: 'Pago en Revisión', confirmed: 'Confirmada', completed: 'Completada', cancelled: 'Cancelada', modification_requested: 'Cambio Solicitado' }
-const statusClass = { pending: 'pending', quotation_sent: 'pending', payment_uploaded: 'confirmed', confirmed: 'confirmed', completed: 'completed', cancelled: 'cancelled', modification_requested: 'pending' }
 
 export default function ClientDashboard() {
   const navigate = useNavigate()

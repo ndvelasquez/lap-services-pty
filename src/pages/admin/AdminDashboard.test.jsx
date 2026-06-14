@@ -7,20 +7,8 @@ import * as api from '../../services/api'
 // Mock the API and supabase client
 vi.mock('../../services/api', () => ({
   getAllAppointments: vi.fn(),
-  supabase: {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        neq: vi.fn(() => ({
-          count: 'exact',
-          head: true,
-          then: (cb) => cb({ count: 10, error: null })
-        })),
-        eq: vi.fn(() => ({
-          then: (cb) => cb({ data: [{ total: 100.50 }, { total: 200.00 }], error: null })
-        }))
-      }))
-    }))
-  }
+  getIncomeStats: vi.fn(),
+  getClientCount: vi.fn()
 }))
 
 describe('AdminDashboard Component', () => {
@@ -46,6 +34,8 @@ describe('AdminDashboard Component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     api.getAllAppointments.mockResolvedValue(mockAppointments)
+    api.getIncomeStats.mockResolvedValue({ confirmedIncome: 300.50, depositsInTransit: 0, depositsPendingVerification: 0 })
+    api.getClientCount.mockResolvedValue(10)
   })
 
   it('debe cargar y mostrar los KPIs correctamente', async () => {

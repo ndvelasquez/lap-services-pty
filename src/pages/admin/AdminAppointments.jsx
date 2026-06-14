@@ -3,25 +3,10 @@ import { Link } from 'react-router-dom'
 import { Search, Filter, Check, X as XIcon, Eye, User, Calendar, Clock, MapPin, FileText, Layers, Image as ImageIcon, Phone, Mail } from 'lucide-react'
 import { getAllAppointments, updateAppointment, verifyDeposit, recordFinalPayment, supabase } from '../../services/api'
 import { alertConfirm, toastSuccess, toastError } from '../../lib/notifications'
-
-const statusLabels = {
-  pending: 'Pendiente',
-  quotation_sent: 'Cotización Enviada',
-  payment_uploaded: 'Pago en Revisión',
-  confirmed: 'Confirmada',
-  completed: 'Completada',
-  cancelled: 'Cancelada',
-  modification_requested: 'Cambio Solicitado'
-}
-const statusClass = {
-  pending: 'pending',
-  quotation_sent: 'pending',
-  payment_uploaded: 'confirmed',
-  confirmed: 'confirmed',
-  completed: 'completed',
-  cancelled: 'cancelled',
-  modification_requested: 'pending'
-}
+import {
+  APPOINTMENT_STATUS_LABELS as statusLabels,
+  APPOINTMENT_STATUS_CLASS as statusClass
+} from '../../shared/status'
 
 function buildGcalUrl(apt) {
   const date = apt.appointment_date?.replace(/-/g, '') || ''
