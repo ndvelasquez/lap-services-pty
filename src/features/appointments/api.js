@@ -1,6 +1,6 @@
 // Módulo de dominio: GESTIÓN DE CITAS (appointments).
 import { supabase } from '../../lib/supabase'
-import { triggerN8nWebhook } from '../../shared/n8n'
+import { triggerWorkflow } from '../../shared/notify'
 
 export async function createAppointment(appData) {
   const { clientId, date, time, location, notes, services, customDetails, images } = appData
@@ -47,35 +47,12 @@ export async function createAppointment(appData) {
     throw srvError
   }
 
-  // Perfil del cliente para el webhook
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('name, email, phone')
-    .eq('id', clientId)
-    .single()
-
-  const clientName = profile?.name || 'Cliente'
-  const clientEmail = profile?.email || ''
-  const clientPhone = profile?.phone || ''
-
-  // Nombres de servicios para el email
-  const { data: servicesData } = await supabase
-    .from('services')
-    .select('name')
-    .in('id', services)
-  const serviceNames = servicesData?.map(s => s.name) || []
-
-  // 3. Notificar vía n8n
+  // 3. Notificar (emails admin + cliente). La Edge Function re-obtiene el perfil y los
+  // servicios desde Supabase, por lo que solo enviamos el id.
   try {
-    await triggerN8nWebhook('/new-appointment', {
-      appointment,
-      clientName,
-      clientEmail,
-      clientPhone,
-      serviceNames
-    })
+    await triggerWorkflow('new-appointment', { id: appointment.id })
   } catch (error) {
-    console.warn('Webhook notification failed, but appointment was created:', error)
+    console.warn('Notification failed, but appointment was created:', error)
   }
 
   return appointment
@@ -119,11 +96,11 @@ export async function updateAppointment(id, updates) {
     .single()
   if (error) throw error
 
-  // Disparar n8n si cambió el estado
+  // Disparar notificaciones si cambió el estado
   if (updates.status) {
-    triggerN8nWebhook('/appointment-status', { id, status: updates.status })
+    triggerWorkflow('appointment-status', { id, status: updates.status })
     if (updates.status === 'confirmed') {
-      triggerN8nWebhook('/calendar-sync', { id, status: updates.status })
+      triggerWorkflow('calendar-sync', { id, status: updates.status })
     }
   }
   return data

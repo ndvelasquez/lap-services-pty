@@ -1,7 +1,7 @@
 // Módulo de dominio: PAGOS Y ABONOS (depósito 50% + pago final 50%).
 // Base reutilizable para un futuro módulo de facturación.
 import { supabase } from '../../lib/supabase'
-import { triggerN8nWebhook } from '../../shared/n8n'
+import { triggerWorkflow } from '../../shared/notify'
 
 /**
  * Sube el comprobante de pago, marca la cita como 'payment_uploaded' y registra
@@ -56,7 +56,7 @@ export async function uploadPaymentProof(appointmentId, file) {
   }
 
   // 5. Notificar al admin
-  triggerN8nWebhook('/appointment-status', { id: appointmentId, status: 'payment_uploaded' })
+  triggerWorkflow('appointment-status', { id: appointmentId, status: 'payment_uploaded' })
 
   return paymentUrl
 }

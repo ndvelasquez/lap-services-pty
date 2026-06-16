@@ -9,8 +9,9 @@
 
 App web para **LAP Services PTY**, empresa de limpieza y mantenimiento en Panamá.
 Los clientes agendan citas y piden cotizaciones por un **wizard**; un panel **admin**
-gestiona servicios, citas, cotizaciones, abonos y clientes. Notificaciones, PDFs y
-sync de calendario vía **n8n** + **PDFMonkey**.
+gestiona servicios, citas, cotizaciones, abonos y clientes. Notificaciones (email),
+PDFs y sync de calendario vía **Supabase Edge Functions** + **Resend** + **PDFMonkey**
+(antes n8n, desactivado por costo; ver migración en `docs/ESTADO_DEL_PROYECTO.md`).
 
 ## Stack y comandos
 
@@ -44,7 +45,7 @@ src/features/
                     toggleServiceActive) + catalog.js (SERVICES_LIST + duración, FUENTE ÚNICA)
   clients/          getAllClients, getClients, getClientCount
 src/shared/
-  n8n.js (triggerN8nWebhook) · storage.js (uploadImages) · status.js (labels/clases de estado)
+  notify.js (triggerWorkflow → Edge Function lap-events) · storage.js (uploadImages) · status.js (labels/clases de estado)
 ```
 
 ### Convenciones clave
@@ -52,7 +53,11 @@ src/shared/
   (UUIDs que coinciden con la tabla `services`). No volver a hardcodear listas de servicios.
 - **Estados de cita**: usar `APPOINTMENT_STATUS_LABELS`/`_CLASS` de `src/shared/status.js`.
 - **Sin Supabase directo en componentes**: pasar siempre por la API del módulo.
-- **Secretos**: nunca en código ni en `VITE_*`. Las API keys de n8n van en n8n Credentials.
+- **Automatización (emails/PDFs/calendario)**: pasa por `triggerWorkflow(event, data)`
+  (`src/shared/notify.js`) → Edge Function `supabase/functions/lap-events/`. Reemplazó a
+  n8n (desactivado). Email vía Resend; PDFs vía PDFMonkey; calendario vía `.ics` por email.
+- **Secretos**: nunca en código ni en `VITE_*`. Las API keys (Resend, PDFMonkey) van en
+  los Secrets de la Edge Function en Supabase, no en el repo. Ver `SECURITY.md`.
 
 ## Base de datos (Supabase)
 - Proyecto MCP: `ntcdwswelewwxmyuhbtr`. Operar vía herramientas `mcp__supabase__*`.
@@ -64,15 +69,19 @@ src/shared/
 ## Índice de memoria / documentación
 - **`docs/ESTADO_DEL_PROYECTO.md`** — estado y avances actuales, pendientes (LEER 2º).
 - **`SECURITY.md`** — gestión de secretos y rotación de credenciales.
-- **`AGENTS.md`** — contexto de automatización n8n (webhooks, server).
-- **`CALENDAR_SYNC_SETUP.md`** — sync con Google Calendar.
+- **`supabase/functions/lap-events/README.md`** — Edge Function que orquesta emails/PDFs/
+  calendario (reemplazó a n8n). Secretos y deploy.
+- **`AGENTS.md`** — contexto histórico de los workflows n8n (referencia; n8n desactivado).
+- **`CALENDAR_SYNC_SETUP.md`** — sync con Google Calendar (histórico; ahora se usa `.ics`).
 - **`.agent/skills/`** — skills que documentan los flujos (appointment, notification,
-  quotation, supabase, pdfmonkey). Útiles como referencia de los workflows n8n.
+  quotation, supabase, pdfmonkey). Referencia de payloads/plantillas (eran workflows n8n).
 - **`README.md`** — setup e índice para humanos.
 - Plan de refactor original: `C:\Users\Nestor\.claude\plans\ok-ahora-quiero-que-greedy-dolphin.md`.
 
 ## Estado actual (resumen)
-Refactor de seguridad + modularización completado y en `master` (commit `ca92e47`).
-Build verde; tests 40/43 (3 fallos preexistentes de UI obsoleta). **Pendiente**: Fase 3.5
-(URLs firmadas para storage), rotar credenciales (manual), limpiar lint baseline.
+Refactor de seguridad + modularización en `master` (commit `ca92e47`). **Migración n8n →
+Supabase Edge Functions completa en código** (función `lap-events`, Resend, ICS; n8n
+desactivado por costo). Build verde; tests 40/43 (3 fallos preexistentes de UI obsoleta).
+**Pendiente**: deploy de la función + secretos/Resend (manual), Fase 3.5 (URLs firmadas
+para storage), rotar credenciales (manual), limpiar lint baseline.
 Detalles en `docs/ESTADO_DEL_PROYECTO.md`.

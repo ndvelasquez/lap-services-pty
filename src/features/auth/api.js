@@ -1,6 +1,6 @@
 // Módulo de dominio: AUTENTICACIÓN y perfil de usuario.
 import { supabase } from '../../lib/supabase'
-import { triggerN8nWebhook } from '../../shared/n8n'
+import { triggerWorkflow } from '../../shared/notify'
 
 export async function login(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
@@ -39,8 +39,8 @@ export async function register(userData) {
     if (updErr) console.log('RLS Update failed as expected for unauth signup:', updErr.message)
   }
 
-  // Webhook de bienvenida
-  triggerN8nWebhook('/welcome-email', { email: userData.email, name: userData.name })
+  // Email de bienvenida
+  triggerWorkflow('welcome-email', { email: userData.email, name: userData.name })
 
   return { user: data.user, session: data.session }
 }

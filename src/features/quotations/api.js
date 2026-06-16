@@ -1,6 +1,6 @@
 // Módulo de dominio: COTIZACIONES (quotations) y su ciclo de vida.
 import { supabase } from '../../lib/supabase'
-import { triggerN8nWebhook } from '../../shared/n8n'
+import { triggerWorkflow } from '../../shared/notify'
 import { updateAppointment } from '../appointments/api'
 
 export async function getQuotationById(quoteId) {
@@ -77,11 +77,11 @@ export async function updateQuotation(quoteId, data) {
 }
 
 export async function generateQuotationPdf(quotationId) {
-  return await triggerN8nWebhook('/gen-quotation-pdf-v5', { quoteId: quotationId, regenerate: false }, 'POST')
+  return await triggerWorkflow('gen-quotation-pdf-v5', { quoteId: quotationId, regenerate: false })
 }
 
 export async function regenerateQuotationPdf(quotationId) {
-  return await triggerN8nWebhook('/gen-quotation-pdf-v5', { quoteId: quotationId, regenerate: true }, 'POST')
+  return await triggerWorkflow('gen-quotation-pdf-v5', { quoteId: quotationId, regenerate: true })
 }
 
 export async function createQuotation(data) {
@@ -141,7 +141,7 @@ export async function getAllQuotations() {
   return data
 }
 
-/** Envía la cotización vía n8n (genera PDF si falta, o reenvía el existente). */
+/** Envía la cotización (genera PDF si falta, o reenvía el existente) vía Edge Function. */
 export async function sendQuotation(quoteId) {
   const { data: quote } = await supabase
     .from('quotations')
@@ -152,9 +152,9 @@ export async function sendQuotation(quoteId) {
   if (!quote) throw new Error('Quotation not found')
 
   if (!quote.pdf_url) {
-    await triggerN8nWebhook('/gen-quotation-pdf-v5', { quoteId: quoteId, regenerate: false }, 'POST')
+    await triggerWorkflow('gen-quotation-pdf-v5', { quoteId: quoteId, regenerate: false })
   } else {
-    await triggerN8nWebhook('/send-quotation', { quoteId: quoteId })
+    await triggerWorkflow('send-quotation', { quoteId: quoteId })
   }
 
   if (quote.status === 'draft') {
@@ -203,16 +203,16 @@ export async function getQuotationByAppointmentId(appointmentId) {
 export async function acceptQuotation(quoteId, appointmentId) {
   await supabase.from('quotations').update({ status: 'accepted' }).eq('id', quoteId)
   await supabase.from('appointments').update({ status: 'quotation_sent' }).eq('id', appointmentId)
-  triggerN8nWebhook('/appointment-status', { id: appointmentId, status: 'quotation_sent' })
+  triggerWorkflow('appointment-status', { id: appointmentId, status: 'quotation_sent' })
 }
 
 export async function rejectQuotation(quoteId, appointmentId) {
   await supabase.from('quotations').update({ status: 'rejected' }).eq('id', quoteId)
   await supabase.from('appointments').update({ status: 'cancelled' }).eq('id', appointmentId)
-  triggerN8nWebhook('/appointment-status', { id: appointmentId, status: 'cancelled' })
+  triggerWorkflow('appointment-status', { id: appointmentId, status: 'cancelled' })
 }
 
 export async function requestModification(appointmentId, notes) {
   await supabase.from('appointments').update({ status: 'modification_requested', notes }).eq('id', appointmentId)
-  triggerN8nWebhook('/appointment-status', { id: appointmentId, status: 'modification_requested', notes })
+  triggerWorkflow('appointment-status', { id: appointmentId, status: 'modification_requested', notes })
 }

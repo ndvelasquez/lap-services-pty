@@ -202,7 +202,7 @@ export default function QuotationBuilder() {
 
         if (shouldGeneratePdf) {
            // PDF generation is a separate concern — the quotation is already saved.
-           // If n8n fails we still show success for the save and warn about the PDF.
+           // If PDF generation fails we still show success for the save and warn about the PDF.
            try {
              await generateQuotationPdf(finalQuoteId)
              setPdfLoading(false)

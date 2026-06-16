@@ -30,3 +30,6 @@ dist-ssr
 # Claude & MCP local config (contienen tokens)
 .claude/settings.local.json
 .mcp.json
+
+# Supabase CLI (temp local: contiene refs/tokens)
+supabase/.temp/

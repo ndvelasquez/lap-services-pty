@@ -1,6 +1,6 @@
 # Estado del Proyecto — LAP Services PTY
 
-> Snapshot de avances para continuar tras un `/clear`. Última actualización: 2026-06-14.
+> Snapshot de avances para continuar tras un `/clear`. Última actualización: 2026-06-15.
 > Lee también `CLAUDE.md` (índice principal) y el plan en
 > `C:\Users\Nestor\.claude\plans\ok-ahora-quiero-que-greedy-dolphin.md`.
 
@@ -16,6 +16,7 @@ commiteado en `master` (commit `ca92e47`). App funcional, build verde, BD config
 | Fase 3 — Modularización por features | ✅ Completada (core) |
 | Fase 3.5 — Storage con URLs firmadas | ⏳ Pendiente (documentada en el plan) |
 | Rotación de credenciales (manual) | ⏳ Pendiente del usuario |
+| Migración n8n → Supabase Edge Functions | ✅ Código completo · ⏳ Deploy + secretos (manual) |
 
 ## Fase 1 — Seguridad (hecho)
 
@@ -54,7 +55,7 @@ src/
     services-catalog/ api.js, catalog.js, index.js
     clients/         api.js, index.js
   shared/
-    n8n.js           (triggerN8nWebhook)
+    notify.js        (triggerWorkflow → Edge Function lap-events; reemplazó a n8n.js)
     storage.js       (uploadImages)
     status.js        (APPOINTMENT_STATUS_LABELS / _CLASS)
   services/
@@ -74,6 +75,34 @@ src/
 
 **NO hecho a propósito**: mover los componentes de página a `src/features/*` (churn
 alto, valor bajo — la frontera reutilizable ya está en api/hooks/catálogo/constantes).
+
+## Migración n8n → Supabase Edge Functions (2026-06-15)
+
+n8n (servidor en Hostinger) se **desactivó por costo**, lo que dejó caídas las
+automatizaciones. Se migró toda la orquestación a una **Edge Function única**
+`supabase/functions/lap-events/index.ts` (Deno), para costo ~$0 sin servidor n8n.
+
+- **Transporte**: `src/shared/notify.js` (`triggerWorkflow(event, data)`) invoca
+  `supabase.functions.invoke('lap-events', { body: { event, data } })`. Reemplazó a
+  `shared/n8n.js` (borrado). Se mantiene alias `triggerN8nWebhook` por compat.
+- **La función re-obtiene los datos** desde Supabase con la service-role key (no confía
+  en el payload del cliente) y enruta por `event`:
+  `new-appointment`, `appointment-status`, `calendar-sync`, `gen-quotation-pdf-v5`,
+  `send-quotation`, `welcome-email`.
+- **Email**: Resend (HTTP API) desde `noreply@lapservicepty.com`. Free 3.000/mes.
+- **PDFs**: se mantiene **PDFMonkey** (template `969D81C2-…`); la función crea→poll→
+  descarga→sube a Storage `lap_quotations`→actualiza `quotations.pdf_url/pdf_version`.
+- **Calendario**: ya **no** usa Google OAuth; adjunta `.ics` + botón "Agregar a Google
+  Calendar" por email y marca `calendar_sync_status='fallback_ics'` (badge "ICS" en admin).
+- `n8n-proxy/` borrado. Los JSON en `n8n-workflows/` se conservan como referencia.
+
+### Pendiente manual para activar (usuario)
+1. Crear cuenta **Resend** y **verificar dominio** `lapservicepty.com` (SPF/DKIM).
+2. Poner **secretos** en Supabase → Edge Functions → Secrets:
+   `RESEND_API_KEY`, `PDFMONKEY_API_KEY`, `ALLOWED_ORIGIN=https://lapservicepty.com`
+   (opcionales: `ADMIN_EMAIL`, `FROM_EMAIL`). `SUPABASE_URL`/`SERVICE_ROLE_KEY` son automáticos.
+3. **Deploy**: `supabase functions deploy lap-events` (o MCP `deploy_edge_function`).
+4. Ver `supabase/functions/lap-events/README.md` para detalle.
 
 ## Estado de la base de datos (Supabase)
 
